@@ -38,7 +38,7 @@ typedef struct
 	string hostName;
 }nodeStruct;
 
-int nodeID, ctrlPort, dataPort, packetIDCtr;
+int nodeID, ctrlPort, dataPort, packetIDCtr, udpSocket;
 string hostName;
 vector<int> neighbors;
 clock_t start;
@@ -50,6 +50,7 @@ map<int, nodeStruct> configTable;
 void sendDistanceVector(int destNodeID);
 void receiveDistanceVector();
 void updateRoutingTable(int nodeID, map<int, routeStruct> recvdRoutingTable);
+static double diffclock(clock_t clock1,clock_t clock2);
 
 int main(int argc, char *argv[])
 {
@@ -94,38 +95,53 @@ int main(int argc, char *argv[])
 	}
 	inFile.close();
 	
+	struct sockaddr_in localAddr;
+	
+	udpSocket = socket(AF_INET, SOCK_DGRAM, 0); //udp socket open
+	if(udpSocket == -1)
+	{
+		cerr<<strerror(errno)<<endl;
+		exit(1);
+	}
+	localAddr.sin_family = AF_INET;
+	localAddr.sin_port = htons(ctrlPort);
+	localAddr.sin_addr.s_addr = INADDR_ANY;
+	
+	int result = bind(udpSocket, (struct sockaddr*)&localAddr, sizeof(localAddr));
+	if(result < 0)
+	{
+		cerr<<"Bind on local socket for sending distance vector failed"<<endl;
+		cerr<<strerror(errno)<<endl;
+		exit(1);
+	}
+	
 	start = clock();
 	while(1)
 	{
 		receiveDistanceVector();
-		difference = (clock() - start)/(double)CLOCKS_PER_SEC;
-		if(difference > 2*1000)
+		if(diffclock(clock(), start) > 2000)
 		{
 			for(int i = 0; i < neighbors.size(); i++)
 			{
 				sendDistanceVector(neighbors.at(i));
 			}
+			start = clock();
 		}
 	}
 }
 
+static double diffclock(clock_t clock1,clock_t clock2)
+{
+    double diffticks=clock1-clock2;
+    double diffms=(diffticks)/(CLOCKS_PER_SEC/1000);
+    return diffms;
+}
+
 void sendDistanceVector(int destNodeID){
 	int udpSocket;
-	struct sockaddr_in destAddr, localAddr;
+	struct sockaddr_in destAddr;
 	struct hostent *he;
 	struct in_addr **addr_list;
-	
-	udpSocket = socket(AF_INET, SOCK_DGRAM, 0); //udp socket open
-	
-	localAddr.sin_family = AF_INET;
-	localAddr.sin_port = htons(ctrlPort);
-	localAddr.sin_addr.s_addr = INADDR_ANY;
-	
-	int result = bind(udpSocket, (struct sockaddr*)&localAddr, 0);
-	if(result < 0)
-	{
-		cerr<<"Bind on local socket for sending distance vector failed"<<endl;
-	}
 	
 	char portbuf[7];
 	snprintf(portbuf, sizeof(portbuf), "%d", configTable[destNodeID].ctrlPort);
@@ -178,16 +194,14 @@ void receiveDistanceVector(){
 	
 	memset(&receiveInfo, 0, sizeof(receiveInfo));
 	getaddrinfo(NULL, portbuf, &receiveInfo, &senderInfo);
-	
-	sockfd = socket(senderInfo->ai_family, senderInfo->ai_socktype, senderInfo->ai_protocol);//UDP Socket open
-	bind(sockfd, senderInfo->ai_addr, senderInfo->ai_addrlen);
 
 	char buf[512];
 	fromlen = sizeof(senderAddr);
 	int result = recvfrom(sockfd, buf, sizeof(buf), 0, (struct sockaddr*)&senderAddr, &fromlen);
-	if(result < 0)
+	if(result == -1)
 	{
-		cerr<<"Error recieving packet"<<endl;
+		//cerr<<"Error recieving packet"<<endl;
+		//cout<<strerror(errno)<<endl;
 	}
 	
 	//should receive the routingTable from the sender in buf along with packet header
