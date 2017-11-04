@@ -12,8 +12,39 @@
 
 using namespace std;
 
-int main(int argc, char *argv[]){
+int packetCounter = 0;
 
+class node{
+	public:
+		int nodeid, ctrlPort, dataPort;
+		string hostName;
+	private:
+}
+
+typedef struct{
+	uint8_t sourceNodeID;
+	uint8_t destNodeID;
+	uint8_t packetID;
+	uint8_t TTL;
+}controlPacketHeader;
+
+typedef struct{
+	int [2] pathToTravel;
+}controlPacketPayload;
+
+typedef struct{
+	uint8_t sourceNodeID;
+	uint8_t destNodeID;
+	uint8_t packetID;
+	uint8_t TTL
+}dataPacketHeader;
+
+typedef struct{
+	int [100] pathTraveled;
+}dataPacketPayload;
+
+int main(int argc, char *argv[]){
+	vector<node>nodeList;
 	
 	if(argc < 2){
 		cout<<"usage : "<<argv[0]<<" config.txt"<<endl;
@@ -22,7 +53,7 @@ int main(int argc, char *argv[]){
 	
 
 	if(argv[2] == "generate-packet"){
-		if(generatePacket(atoi(argv[3]),atoi(argv[4])) == -1){
+		if(generatePacket(atoi(argv[3]),atoi(argv[4]),nodeList) == -1){
 			cout <<"Error sending packet"<<endl;
 			exit(1);
 		}
@@ -37,16 +68,30 @@ int main(int argc, char *argv[]){
 			exit(1);
 		}
 	}else{
-		if(initialize(argv[2]) == -1){
-			cout << "Initialization Failed" << endl;
-			exit(1)
-		}
+		nodeList = initialize(argv[2]);
+		
 	}
 
 }
 
-int generatePacket(int sender,int reciever){
-	
+int generatePacket(int sender,int reciever,nodeList){
+	//step 1 create control packet
+	controlPacketHeader newControlHeader;
+	controlPacketPayload newControlPayLoad;
+	//step 2 find the info for the sender packet
+	for(int i = 0; i < nodeList.size();i++){
+		if(nodeList[i].nodeid == sender){
+			//we have found our man
+			node temp = nodeList[i];
+			newControlHeader.sourceNodeID = temp.nodeid;
+			newControlHeader.destNodeID = reciever;
+			newControlHeader.packetID = packetCounter;
+			newControlHeader.TTL = 15;
+			break;
+		}
+	}
+	newControlPayload.pathToTravel[0] = sender;
+	newControlPayload.pathToTravel[1] = reciever;
 }
 
 int createLink(int node1, int node2){
@@ -58,6 +103,7 @@ int removeLink(int node1, int node2){
 }
 
 int initialize(string file){
+	vector<node>nodeList;
 	ifstream inFile;
 	inFile.open(file);
 	if(!inFile){
@@ -69,13 +115,14 @@ int initialize(string file){
 		//instantiate a class first?
 		istringstream in(line);
 		in>>nodeID>>hostName>>ctrlPort>>dataPort;
-		//need to handle some random number of neighbors after
-		int n;
-		while(in>>n){
-			neighbors.push_back(n);
-		}
+		node node;
+		node.nodeid = nodeID;
+		node.ctrlPort = ctrlPort;
+		node.dataPort = dataPort;
+		nodeList.push_back(node);
 	}
 	inFile.close();
+	return nodeList;
 }
 
 
