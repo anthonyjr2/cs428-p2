@@ -13,8 +13,8 @@
 //routing table 
 typedef struct{
 	int destinationNode;
-	int lastTraveledNode
-	int distace;
+	int lastTraveledNode;
+	int distance;
 }routeStruct;
 
 using namespace std;
@@ -22,9 +22,7 @@ using namespace std;
 int nodeid, ctrlPort, dataPort;
 string hostName;
 
-//vector<int> neighbors;
-map<int,int> routingTable;
-map<int,int> distanceTable;
+map<int,routeStruct> routingTable;
 
 int main(int argc, char *argv[])
 {
@@ -53,16 +51,15 @@ int main(int argc, char *argv[])
 		if(nodeID == thisNodeID)
 		{
 			int n;
-			while(in>>n){
-				neighbors.push_back(n);
-			}
-			for(int i = 0; i < neighbors.size(); i++)
+			while(in>>n)
 			{
-				routingTable.insert(pair <int, int> (neighbors.at(i), ));
+				routeStruct neighbor = {distance = 1; lastTraveledNode = nodeID; destinationNode = n;}
+				routingTable.insert(pair <int, routeStruct> (n, neighbor));
 			}
 		}
 	}
 	inFile.close();
+	
 	
 	//create control thread here?
 	//have it always wait in recieveDistanceVector
