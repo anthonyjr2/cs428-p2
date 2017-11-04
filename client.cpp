@@ -75,6 +75,7 @@ int main(int argc, char *argv[]){
 }
 
 int generatePacket(int sender,int reciever,nodeList){
+	string host = "";
 	//step 1 create control packet
 	controlPacketHeader newControlHeader;
 	controlPacketPayload newControlPayLoad;
@@ -87,11 +88,21 @@ int generatePacket(int sender,int reciever,nodeList){
 			newControlHeader.destNodeID = reciever;
 			newControlHeader.packetID = packetCounter;
 			newControlHeader.TTL = 15;
+			host = temp.hostName;
 			break;
 		}
 	}
 	newControlPayload.pathToTravel[0] = sender;
 	newControlPayload.pathToTravel[1] = reciever;
+	//step 3 send that shit
+	// now with UDP datagram sockets:
+	//getaddrinfo(...
+	
+	//dest = ...  // assume "dest" holds the address of the destination
+	//dgram_socket = socket(...
+
+	// send secret message normally:
+	sendto(dgram_socket, secret_message, strlen(secret_message)+1, 0, (struct sockaddr*)&dest, sizeof dest);
 }
 
 int createLink(int node1, int node2){
