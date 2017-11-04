@@ -12,8 +12,37 @@
 
 using namespace std;
 
-int main(int argc, char *argv[]){
+class node{
+	public:
+		int nodeid, ctrlPort, dataPort;
+		string hostName;
+	private:
+}
 
+typedef struct{
+	uint8_t sourceNodeID;
+	uint8_t destNodeID;
+	uint8_t packetID;
+	uint8_t TTL
+}controlPacketHeader;
+
+typedef struct{
+	int [100] pathTraveled;
+}controlPacketPayload;
+
+typedef struct{
+	uint8_t sourceNodeID;
+	uint8_t destNodeID;
+	uint8_t packetID;
+	uint8_t TTL
+}dataPacketHeader;
+
+typedef struct{
+	int [100] pathTraveled;
+}dataPacketPayload;
+
+int main(int argc, char *argv[]){
+	vector<node>nodeList;
 	
 	if(argc < 2){
 		cout<<"usage : "<<argv[0]<<" config.txt"<<endl;
@@ -69,11 +98,11 @@ int initialize(string file){
 		//instantiate a class first?
 		istringstream in(line);
 		in>>nodeID>>hostName>>ctrlPort>>dataPort;
-		//need to handle some random number of neighbors after
-		int n;
-		while(in>>n){
-			neighbors.push_back(n);
-		}
+		node node;
+		node.nodeid = nodeID;
+		node.ctrlPort = ctrlPort;
+		node.dataPort = dataPort;
+		nodeList.push_back(node);
 	}
 	inFile.close();
 }
