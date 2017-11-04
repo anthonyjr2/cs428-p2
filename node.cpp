@@ -11,7 +11,11 @@
 #include <thread>  
 
 //routing table 
-
+typedef struct{
+	int destinationNode;
+	int lastTraveledNode
+	int distace;
+}routeStruct;
 
 using namespace std;
 
