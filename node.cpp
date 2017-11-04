@@ -1,35 +1,59 @@
 #include <iostream>
 #include <unistd.h>
+#include <cstring>
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <netdb.h>
 #include <fstream>
+#include <sstream>
 #include <string>
 #include <vector>
 #include <map>
-#include <thread>  
+#include <thread>
+#include <ctime>
+
+#define PACKET_SIZE 1024
+
+using namespace std;
 
 //routing table 
 typedef struct{
 	int destinationNode;
-	int lastTraveledNode
-	int distace;
+	//int lastTraveledNode;
+	int distance;
 }routeStruct;
 
-using namespace std;
+typedef struct{
+	uint8_t sourceNodeID;
+	uint8_t destNodeID;
+	uint8_t packetID;
+	int otherSize;
+}packetHeader;
 
-int nodeid, ctrlPort, dataPort;
+typedef struct
+{
+	int ctrlPort;
+	int dataPort;
+	string hostName;
+}nodeStruct;
+
+int nodeID, ctrlPort, dataPort, packetIDCtr;
 string hostName;
+vector<int> neighbors;
+clock_t start;
+double difference;
 
-//vector<int> neighbors;
-map<int,int> routingTable;
-map<int,int> distanceTable;
+map<int,routeStruct> routingTable;
+map<int, nodeStruct> configTable;
+
+void sendDistanceVector(int destNodeID);
+void receiveDistanceVector();
+void updateRoutingTable(int nodeID, map<int, routeStruct> recvdRoutingTable);
 
 int main(int argc, char *argv[])
 {
-	Node thisNode;
-	int thisNodeID = argv[2];
+	int thisNodeID = atoi(argv[2]);
 	
 	if(argc != 3)
 	{
@@ -50,85 +74,180 @@ int main(int argc, char *argv[])
 		istringstream in(line);
 		in>>nodeID>>hostName>>ctrlPort>>dataPort;
 		
+		nodeStruct ns;
+		ns.ctrlPort = ctrlPort;
+		ns.dataPort = dataPort;
+		configTable.insert(pair<int, nodeStruct> (nodeID, ns));
+		
 		if(nodeID == thisNodeID)
 		{
 			int n;
-			while(in>>n){
-				neighbors.push_back(n);
-			}
-			for(int i = 0; i < neighbors.size(); i++)
+			while(in>>n)
 			{
-				routingTable.insert(pair <int, int> (neighbors.at(i), ));
+				routeStruct neighbor;
+				neighbor.distance = 1;
+				neighbor.destinationNode = n;
+				routingTable.insert(pair <int, routeStruct> (n, neighbor));
+				neighbors.push_back(n);
 			}
 		}
 	}
 	inFile.close();
 	
-	//create control thread here?
-	//have it always wait in recieveDistanceVector
+	start = clock();
 	while(1)
 	{
-		sendDistanceVector();
 		receiveDistanceVector();
-		sleep(5);
-	}
-	
-	
-	
-}
-
-//i guess we would call this from the outside function?
-void sendDistanceVector(){
-	char* outboundHostName;
-	struct addrinfo hints, *res;
-	struct sockaddr_storage addr;
-	socklen_t tolen;
-	char ipstr[INET6_ADDRSTRLEN];
-	int sockfd, byteCount;
-	
-	memset(&hints, 0, sizeof hints);
-	hints.ai_family = AF_INET;  // use IPv4 or IPv6, whichever
-	hints.ai_socktype = SOCK_DGRAM;
-	hints.ai_flags = AI_PASSIVE;
-	getaddrinfo(NULL, itoa(ctrlPort), &hints, &res);
-	sockfd = socket(res->ai_family, res->ai_socktype, res->ai_protocol);//so this is this nodes socket i think
-	bind(sockfd, res->ai_addr, res->ai_addrlen);
-	
-	
-	char buf[512];
-	tolen = sizeof addr;
-	byteCount = recvfrom(sockfd,buf,sizeof buf, 0,&addr,&tolen);
-	if(byteCount == -1){
-		cerr<<"Error recieving packet"<<endl;
+		difference = (clock() - start)/(double)CLOCKS_PER_SEC;
+		if(difference > 2*1000)
+		{
+			for(int i = 0; i < neighbors.size(); i++)
+			{
+				sendDistanceVector(neighbors.at(i));
+			}
+		}
 	}
 }
 
-//idk if this is necesary
-//before we can recieve we have to connect to all neighbor nodes
-//have to make the structs the hold the addresses of the senders to know who send the distance vector
+void sendDistanceVector(int destNodeID){
+	int udpSocket;
+	struct sockaddr_in destAddr, localAddr;
+	struct hostent *he;
+	struct in_addr **addr_list;
+	
+	udpSocket = socket(AF_INET, SOCK_DGRAM, 0); //udp socket open
+	
+	localAddr.sin_family = AF_INET;
+	localAddr.sin_port = htons(ctrlPort);
+	localAddr.sin_addr.s_addr = INADDR_ANY;
+	
+	int result = bind(udpSocket, (struct sockaddr*)&localAddr, 0);
+	if(result < 0)
+	{
+		cerr<<"Bind on local socket for sending distance vector failed"<<endl;
+	}
+	
+	char portbuf[7];
+	snprintf(portbuf, sizeof(portbuf), "%d", configTable[destNodeID].ctrlPort);
+	he = gethostbyname(configTable[destNodeID].hostName.c_str());
+	
+	destAddr.sin_family = AF_INET;
+	destAddr.sin_port = htons(configTable[destNodeID].ctrlPort); //dest ctrl port and ip
+	memcpy(&destAddr.sin_addr, he->h_addr, he->h_length);
+	
+	packetHeader header;
+	header.sourceNodeID = nodeID;
+	header.destNodeID = destNodeID;
+	header.packetID = packetIDCtr;
+	
+	int distanceToSend[routingTable.size()+1];
+	int nodesToSend[routingTable.size()+1];
+
+	for(int i = 0; i < routingTable.size()+1; i++)
+	{
+		nodesToSend[i] = routingTable[i].destinationNode;
+	}
+	for(int i = 0; i < routingTable.size()+1; i++)
+	{
+		distanceToSend[i] = routingTable[i].distance;
+	}
+	nodesToSend[-1] = -1;
+	distanceToSend[-1] = -1;
+	
+	char packet[PACKET_SIZE];
+	memcpy(packet, &header, sizeof(header));
+	memcpy(packet + sizeof(header), &nodesToSend, sizeof(nodesToSend));
+	memcpy(packet + sizeof(header) + sizeof(nodesToSend), &distanceToSend, sizeof(distanceToSend));
+	
+	sendto(udpSocket, packet, PACKET_SIZE, 0, (struct sockaddr*)&destAddr, sizeof(destAddr));
+
+}
+
 void receiveDistanceVector(){
-	char* inboundHostName;
-	struct addrinfo hints, *res;
-	struct sockaddr_storage addr;
+	struct addrinfo receiveInfo, *senderInfo;
+	struct sockaddr_in senderAddr;
 	socklen_t fromlen;
-	char ipstr[INET6_ADDRSTRLEN];
-	int sockfd, byteCount;
+	int sockfd;
 
-	memset(&hints, 0, sizeof hints);
-	hints.ai_family = AF_INET;  // use IPv4 or IPv6, whichever
-	hints.ai_socktype = SOCK_DGRAM;
-	hints.ai_flags = AI_PASSIVE;
-	getaddrinfo(NULL, itoa(ctrlPort), &hints, &res);
-	sockfd = socket(res->ai_family, res->ai_socktype, res->ai_protocol);//so this is this nodes socket i think
-	bind(sockfd, res->ai_addr, res->ai_addrlen);
+	receiveInfo.ai_family = AF_INET;
+	receiveInfo.ai_socktype = SOCK_DGRAM;
+	receiveInfo.ai_flags = AI_PASSIVE;
+	
+	char portbuf[7];
+	snprintf(portbuf, sizeof(portbuf), "%d", ctrlPort);
+	
+	memset(&receiveInfo, 0, sizeof(receiveInfo));
+	getaddrinfo(NULL, portbuf, &receiveInfo, &senderInfo);
+	
+	sockfd = socket(senderInfo->ai_family, senderInfo->ai_socktype, senderInfo->ai_protocol);//UDP Socket open
+	bind(sockfd, senderInfo->ai_addr, senderInfo->ai_addrlen);
 
 	char buf[512];
-	fromlen = sizeof addr;
-	byteCount = recvfrom(sockfd,buf,sizeof buf, 0,&addr,&fromlen);//unsure of what to do with sockfd
-	if(byteCount == -1){
+	fromlen = sizeof(senderAddr);
+	int result = recvfrom(sockfd, buf, sizeof(buf), 0, (struct sockaddr*)&senderAddr, &fromlen);
+	if(result < 0)
+	{
 		cerr<<"Error recieving packet"<<endl;
 	}
-	//determine which neighbor this shit came from with getaddr info or whatever that shit was
-	//parse buffer for the distance vector
+	
+	//should receive the routingTable from the sender in buf along with packet header
+	
+	char recvdPacketHeader[sizeof(packetHeader)];
+	memcpy(recvdPacketHeader, buf, sizeof(packetHeader));
+	packetHeader p;
+	memcpy(&p, recvdPacketHeader, sizeof(packetHeader));
+	
+	char recvdTableBuffer[PACKET_SIZE - sizeof(packetHeader)];
+	memcpy(recvdTableBuffer, buf + sizeof(packetHeader), sizeof(recvdTableBuffer));
+	map<int,routeStruct> recvdRoutingTable;
+	
+	int recvdDist[512];
+	int recvdDestNode[512];
+	
+	int ctr = 0;
+	for(int i = 0; i < PACKET_SIZE - sizeof(packetHeader); i++)
+	{
+		if(recvdTableBuffer[i] != -1)
+		{
+			recvdDestNode[i] = recvdTableBuffer[i];
+			ctr++;
+		}
+		else
+		{
+			for(int k = i+1; k < PACKET_SIZE - sizeof(packetHeader); k++)
+			{
+				if(recvdTableBuffer[k] != -1)
+				{
+					recvdDist[k] = recvdTableBuffer[k];
+				}
+				else
+				{
+					break;
+				}
+			}
+			break;
+		}
+	}
+
+	for(int i = 0; i < ctr; i++)
+	{
+		routeStruct recvdStruct;
+		recvdStruct.destinationNode = recvdDestNode[i];
+		recvdStruct.distance = recvdDist[i]; 
+		recvdRoutingTable.insert(pair<int,routeStruct>(p.sourceNodeID,recvdStruct));
+	}
+	
+	
+	updateRoutingTable(p.destNodeID, recvdRoutingTable);
+}
+
+void updateRoutingTable(int nodeID, map<int, routeStruct> recvdRoutingTable)
+{
+	
+
 
 }
+
+
+
+
