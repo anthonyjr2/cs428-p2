@@ -11,16 +11,18 @@
 #include <vector>
 #include <map>
 #include <thread>
-#include <ctime>
+#include <chrono>
 
 #define PACKET_SIZE 1024
 
 using namespace std;
 
+typedef chrono::high_resolution_clock Clock;
+typedef chrono::milliseconds ms;
+
 //routing table 
 typedef struct{
 	int intermediateNode;
-	//int lastTraveledNode;
 	int distance;
 }routeStruct;
 
@@ -38,10 +40,20 @@ typedef struct
 	string hostName;
 }nodeStruct;
 
+typedef struct{
+	uint8_t sourceNodeID;
+	uint8_t destNodeID;
+	uint8_t packetID;
+	uint8_t TTL;
+}controlPacketHeader;
+
+typedef struct{
+	int pathToTravel[2];
+}controlPacketPayload;
+
 int nodeID, ctrlPort, dataPort, packetIDCtr, udpSocket;
 string hostName;
 vector<int> neighbors;
-clock_t start;
 double difference;
 
 map<int,routeStruct> routingTable;
@@ -49,7 +61,7 @@ map<int, nodeStruct> configTable;
 
 void sendDistanceVector(int destNodeID);
 void receiveDistanceVector();
-void updateRoutingTable(int nodeID, map<int, routeStruct> recvdRoutingTable);
+void updateRoutingTable(int destNodeID, int sourceNodeID, int senderPort, map<int, routeStruct> recvdRoutingTable);
 static double diffclock(clock_t clock1,clock_t clock2);
 
 int main(int argc, char *argv[])
@@ -78,6 +90,7 @@ int main(int argc, char *argv[])
 		nodeStruct ns;
 		ns.ctrlPort = ctrlPort;
 		ns.dataPort = dataPort;
+		ns.hostName = hostName;
 		configTable.insert(pair<int, nodeStruct> (nodeID, ns));
 		
 		if(nodeID == thisNodeID)
@@ -94,9 +107,9 @@ int main(int argc, char *argv[])
 		}
 	}
 	routeStruct thisNode;
-	thisNode.distance = -1
+	thisNode.distance = -1;
 	thisNode.intermediateNode = thisNodeID;
-	routingTable.insert(pair<int,routeStruct>(thisNodeID, thisNode);
+	routingTable.insert(pair<int,routeStruct>(thisNodeID, thisNode));
 	inFile.close();
 	
 	struct sockaddr_in localAddr;
@@ -107,6 +120,8 @@ int main(int argc, char *argv[])
 		cerr<<strerror(errno)<<endl;
 		exit(1);
 	}
+	
+	memset((char*)&localAddr, 0, sizeof(localAddr));
 	localAddr.sin_family = AF_INET;
 	localAddr.sin_port = htons(ctrlPort);
 	localAddr.sin_addr.s_addr = INADDR_ANY;
@@ -119,37 +134,34 @@ int main(int argc, char *argv[])
 		exit(1);
 	}
 	
-	start = clock();
+	auto start = Clock::now();
 	while(1)
 	{
-		receiveDistanceVector();
-		if(diffclock(clock(), start) > 2000)
-		{
+		auto diff = chrono::duration_cast<ms>(Clock::now() - start);
+		if(diff.count() > 2000)
+		{	
 			for(int i = 0; i < neighbors.size(); i++)
 			{
+				cout<<"Sending packet from node "<<thisNodeID<<" to node "<<neighbors.at(i)<<endl;
 				sendDistanceVector(neighbors.at(i));
 			}
-			start = clock();
+			start = Clock::now();
 		}
+		receiveDistanceVector();
 	}
 }
 
-static double diffclock(clock_t clock1,clock_t clock2)
-{
-    double diffticks=clock1-clock2;
-    double diffms=(diffticks)/(CLOCKS_PER_SEC/1000);
-    return diffms;
-}
-
 void sendDistanceVector(int destNodeID){
-	int udpSocket;
 	struct sockaddr_in destAddr;
 	struct hostent *he;
 	struct in_addr **addr_list;
 	
-	char portbuf[7];
-	snprintf(portbuf, sizeof(portbuf), "%d", configTable[destNodeID].ctrlPort);
 	he = gethostbyname(configTable[destNodeID].hostName.c_str());
+	if(he == NULL)
+	{
+		cerr<<"Error with gethostbyname in send"<<endl;
+		cerr<<h_errno<<endl;
+	}
 	
 	destAddr.sin_family = AF_INET;
 	destAddr.sin_port = htons(configTable[destNodeID].ctrlPort); //dest ctrl port and ip
@@ -162,105 +174,135 @@ void sendDistanceVector(int destNodeID){
 	
 	int distanceToSend[routingTable.size()+1];
 	int nodesToSend[routingTable.size()+1];
-
-	for(int i = 0; i < routingTable.size()+1; i++)
+	int destinationsToSend[routingTable.size()+1];
+	for(int i = 0; i < routingTable.size(); i++)
 	{
-		nodesToSend[i] = routingTable[i].destinationNode;
+		nodesToSend[i] = routingTable[i].intermediateNode;
 	}
-	for(int i = 0; i < routingTable.size()+1; i++)
+	for(int i = 0; i < routingTable.size(); i++)
 	{
 		distanceToSend[i] = routingTable[i].distance;
 	}
+	for(int i = 0; i < routingTable.size(); i++)
+	{
+		destinationsToSend[i] = routingTable[i].distance;
+	}
 	nodesToSend[-1] = -1;
 	distanceToSend[-1] = -1;
+	destinationsToSend[-1] = -1;
 	
 	char packet[PACKET_SIZE];
 	memcpy(packet, &header, sizeof(header));
 	memcpy(packet + sizeof(header), &nodesToSend, sizeof(nodesToSend));
 	memcpy(packet + sizeof(header) + sizeof(nodesToSend), &distanceToSend, sizeof(distanceToSend));
-	
-	sendto(udpSocket, packet, PACKET_SIZE, 0, (struct sockaddr*)&destAddr, sizeof(destAddr));
+	memcpy(packet + sizeof(header) + sizeof(nodesToSend) + sizeof(distanceToSend), &destinationsToSend, sizeof(destinationsToSend));
 
-}
-
-void receiveDistanceVector(){
-	struct addrinfo receiveInfo, *senderInfo;
-	struct sockaddr_in senderAddr;
-	socklen_t fromlen;
-	int sockfd;
-
-	receiveInfo.ai_family = AF_INET;
-	receiveInfo.ai_socktype = SOCK_DGRAM;
-	receiveInfo.ai_flags = AI_PASSIVE;
-	
-	char portbuf[7];
-	snprintf(portbuf, sizeof(portbuf), "%d", ctrlPort);
-	
-	memset(&receiveInfo, 0, sizeof(receiveInfo));
-	getaddrinfo(NULL, portbuf, &receiveInfo, &senderInfo);
-
-	char buf[512];
-	fromlen = sizeof(senderAddr);
-	int result = recvfrom(sockfd, buf, sizeof(buf), 0, (struct sockaddr*)&senderAddr, &fromlen);
-	int senderPort = ntons(senderAddr.sin_port);
+	int result = sendto(udpSocket, packet, PACKET_SIZE, 0, (struct sockaddr*)&destAddr, sizeof(destAddr));
 	if(result == -1)
 	{
-		//cerr<<"Error recieving packet"<<endl;
-		//cout<<strerror(errno)<<endl;
+		cerr<<"Error sending packet"<<endl;
+		cout<<strerror(errno)<<endl;
+		exit(1);
 	}
+}
+void receiveDistanceVector(){
+	struct hostent *he;
+	struct sockaddr_in senderAddr;
+	socklen_t fromlen;
+	struct timeval tv;
 	
-	//should receive the routingTable from the sender in buf along with packet header
+	fd_set readfds; //fd_set for select
+	FD_ZERO(&readfds);
+	FD_SET(udpSocket, &readfds);
 	
-	char recvdPacketHeader[sizeof(packetHeader)];
-	memcpy(recvdPacketHeader, buf, sizeof(packetHeader));
-	packetHeader p;
-	memcpy(&p, recvdPacketHeader, sizeof(packetHeader));
-	
-	char recvdTableBuffer[PACKET_SIZE - sizeof(packetHeader)];
-	memcpy(recvdTableBuffer, buf + sizeof(packetHeader), sizeof(recvdTableBuffer));
-	map<int,routeStruct> recvdRoutingTable;
-	
-	int recvdDist[512];
-	int recvdDestNode[512];
-	
-	int ctr = 0;
-	for(int i = 0; i < PACKET_SIZE - sizeof(packetHeader); i++)
+	tv.tv_sec = 3;
+	tv.tv_usec = 0;
+	int rv = select(udpSocket + 1, &readfds, NULL, NULL, &tv);
+	if(rv == -1)
 	{
-		if(recvdTableBuffer[i] != -1)
+		cerr<<"Select error"<<endl;
+	}
+	else if(rv == 0)
+	{
+		cout<<"Timeout on receving packet"<<endl;
+	}
+	else
+	{
+		char buf[512];
+		fromlen = sizeof(senderAddr);
+		int result = recvfrom(udpSocket, buf, sizeof(buf), 0, (struct sockaddr*)&senderAddr, &fromlen);
+		if(result == -1)
 		{
-			recvdDestNode[i] = recvdTableBuffer[i];
-			ctr++;
+			cerr<<"Error recieving packet"<<endl;
+			cout<<strerror(errno)<<endl;
+			exit(1);
 		}
-		else
+		int senderPort = ntohs(senderAddr.sin_port);
+	
+		//should receive the routingTable from the sender in buf along with packet header
+	
+		char recvdPacketHeader[sizeof(packetHeader)];
+		memcpy(recvdPacketHeader, buf, sizeof(packetHeader));
+		packetHeader p;
+		memcpy(&p, recvdPacketHeader, sizeof(packetHeader));
+	
+		char recvdTableBuffer[PACKET_SIZE - sizeof(packetHeader)];
+		memcpy(recvdTableBuffer, buf + sizeof(packetHeader), sizeof(recvdTableBuffer));
+		map<int,routeStruct> recvdRoutingTable;
+	
+		int recvdDist[512];
+		int recvdIntNode[512];
+		int recvdDestNode[512];
+	
+		int ctr = 0;
+		for(int i = 0; i < PACKET_SIZE - sizeof(packetHeader); i++)
 		{
-			for(int k = i+1; k < PACKET_SIZE - sizeof(packetHeader); k++)
+			if(recvdTableBuffer[i] != -1)
 			{
-				if(recvdTableBuffer[k] != -1)
-				{
-					recvdDist[k] = recvdTableBuffer[k];
-				}
-				else
-				{
-					break;
-				}
+				recvdIntNode[i] = recvdTableBuffer[i];
+				ctr++;
 			}
-			break;
+			else
+			{
+				for(int k = i+1; k < PACKET_SIZE - sizeof(packetHeader); k++)
+				{
+					if(recvdTableBuffer[k] != -1)
+					{
+						recvdDist[k] = recvdTableBuffer[k];
+					}
+					else
+					{
+						for(int j = k+1; j < PACKET_SIZE - sizeof(packetHeader); j++)
+						{
+							if(recvdTableBuffer[j] != -1)
+							{
+								recvdDestNode[j] = recvdTableBuffer[j];
+							}
+							else
+							{
+								break;
+							}
+						}
+						break;
+					}
+				}
+				break;
+			}
 		}
-	}
 
-	for(int i = 0; i < ctr; i++)
-	{
-		routeStruct recvdStruct;
-		recvdStruct.destinationNode = recvdDestNode[i];
-		recvdStruct.distance = recvdDist[i]; 
-		recvdRoutingTable.insert(pair<int,routeStruct>(p.sourceNodeID,recvdStruct));
+		for(int i = 0; i < ctr; i++)
+		{
+			routeStruct recvdStruct;
+			recvdStruct.intermediateNode = recvdIntNode[i];
+			recvdStruct.distance = recvdDist[i]; 
+			recvdRoutingTable.insert(pair<int,routeStruct>(recvdDestNode[i],recvdStruct));
+		}
+	
+		updateRoutingTable(p.destNodeID,p.sourceNodeID,senderPort, recvdRoutingTable);
 	}
-	
-	
-	updateRoutingTable(p.destNodeID,p.sourceNodeID,senderPort, recvdRoutingTable);
 }
 
-void updateRoutingTable(int nodeID, int sourceID, int senderPort, map<int, routeStruct> recvdRoutingTable)
+void updateRoutingTable(int destNodeID, int sourceNodeID, int senderPort, map<int, routeStruct> recvdRoutingTable)
 {
 	//case 1: node in recvd routing table is not in this nodes routing table
 	map<int,routeStruct>::iterator it;
@@ -271,8 +313,8 @@ void updateRoutingTable(int nodeID, int sourceID, int senderPort, map<int, route
 			//element is not in this nodes routing table
 			//there is a new node to put into our map
 			routeStruct case1RouteStruct;
-			case1RouteStruct.distance = iter.distance+1;
-			case1RouteStruct.intermediateNode = iter.intermediateNode;
+			case1RouteStruct.distance = iter->second.distance+1;
+			case1RouteStruct.intermediateNode = iter->second.intermediateNode;
 			routingTable.insert(pair<int,routeStruct>(iter->first,case1RouteStruct));
 		}
 	}
@@ -280,9 +322,9 @@ void updateRoutingTable(int nodeID, int sourceID, int senderPort, map<int, route
 	for(iter = recvdRoutingTable.begin(); iter != recvdRoutingTable.end();iter++){
 		it = routingTable.find(iter->first);
 		if (it != routingTable.end()){
-			if(it.distance < iter.distance+1){
-				it.distance = iter.distance+1;
-				it.intermediateNode = iter.intermediateNode;
+			if(it->second.distance < iter->second.distance+1){
+				it->second.distance = iter->second.distance+1;
+				it->second.intermediateNode = iter->second.intermediateNode;
 			}
 		}
 	}
@@ -292,23 +334,12 @@ void updateRoutingTable(int nodeID, int sourceID, int senderPort, map<int, route
 			it = routingTable.find(iter->first);
 			if (it != routingTable.end()){
 				if(it->first != nodeID){
-					it.distance = iter.distance+1;
-					it.intermediateNode = iter.intermediateNode;
+					it->second.distance = iter->second.distance+1;
+					it->second.intermediateNode = iter->second.intermediateNode;
 				}
 			}		
 		}
 	}
-	for(iter = recvdRoutingTable.begin(); iter != recvdRoutingTable.end();iter++){
-		it = routingTable.find(iter->first);
-		if (it != routingTable.end()){
-			if(it.distance < iter.distance+1){
-				it.distance = iter.distance+1;
-				it.intermediateNode = iter.intermediateNode;
-			}
-		}
-	}	
-
-
 }
 
 
