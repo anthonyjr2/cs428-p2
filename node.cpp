@@ -202,6 +202,7 @@ void receiveDistanceVector(){
 	char buf[512];
 	fromlen = sizeof(senderAddr);
 	int result = recvfrom(sockfd, buf, sizeof(buf), 0, (struct sockaddr*)&senderAddr, &fromlen);
+	int senderPort = ntons(senderAddr.sin_port);
 	if(result == -1)
 	{
 		//cerr<<"Error recieving packet"<<endl;
@@ -256,18 +257,18 @@ void receiveDistanceVector(){
 	}
 	
 	
-	updateRoutingTable(p.destNodeID,p.sourceNodeID, recvdRoutingTable);
+	updateRoutingTable(p.destNodeID,p.sourceNodeID,senderPort, recvdRoutingTable);
 }
 
-void updateRoutingTable(int nodeID, int sourceID map<int, routeStruct> recvdRoutingTable)
+void updateRoutingTable(int nodeID, int sourceID, int senderPort, map<int, routeStruct> recvdRoutingTable)
 {
 	//case 1: node in recvd routing table is not in this nodes routing table
 	map<int,routeStruct>::iterator it;
 	map <int, routeStruct>::iterator iter;
-	for(iter= recvdRoutingTable.begin();iter != recvdRoutingTable.end();iter++){P
-		it = routingTable.find(i);
+	for(iter= recvdRoutingTable.begin();iter != recvdRoutingTable.end();iter++){
+		it = routingTable.find(iter->first);
 		if (it == routingTable.end()){
-			//found element
+			//element is not in this nodes routing table
 			//there is a new node to put into our map
 			routeStruct case1RouteStruct;
 			case1RouteStruct.distance = iter.distance+1;
@@ -276,8 +277,36 @@ void updateRoutingTable(int nodeID, int sourceID map<int, routeStruct> recvdRout
 		}
 	}
 	//case 2: there is more optimal route than we have stored in this routing table
-	
-	//case 3: 
+	for(iter = recvdRoutingTable.begin(); iter != recvdRoutingTable.end();iter++){
+		it = routingTable.find(iter->first);
+		if (it != routingTable.end()){
+			if(it.distance < iter.distance+1){
+				it.distance = iter.distance+1;
+				it.intermediateNode = iter.intermediateNode;
+			}
+		}
+	}
+	//case 3: distance vector coming in on same port so we have to update
+	if(senderPort == ctrlPort){
+		for(iter = recvdRoutingTable.begin(); iter != recvdRoutingTable.end();iter++){
+			it = routingTable.find(iter->first);
+			if (it != routingTable.end()){
+				if(it->first != nodeID){
+					it.distance = iter.distance+1;
+					it.intermediateNode = iter.intermediateNode;
+				}
+			}		
+		}
+	}
+	for(iter = recvdRoutingTable.begin(); iter != recvdRoutingTable.end();iter++){
+		it = routingTable.find(iter->first);
+		if (it != routingTable.end()){
+			if(it.distance < iter.distance+1){
+				it.distance = iter.distance+1;
+				it.intermediateNode = iter.intermediateNode;
+			}
+		}
+	}	
 
 
 }
