@@ -216,26 +216,26 @@ void receiveDistanceVector(){
 	struct timeval tv;
 	
 	fd_set readfds; //fd_set for select
-	FD_ZERO(&readfds);
+	FD_ZERO(&readfds);//reset the fd set each time so it works
 	FD_SET(udpSocket, &readfds);
 	
-	tv.tv_sec = 3;
+	tv.tv_sec = 3;//timeout is 3 seconds
 	tv.tv_usec = 0;
-	int rv = select(udpSocket + 1, &readfds, NULL, NULL, &tv);
+	int rv = select(udpSocket + 1, &readfds, NULL, NULL, &tv);//blocking and waiting for input from udp
 	if(rv == -1)
 	{
-		cerr<<"Select error"<<endl;
+		cerr<<"Select error"<<endl;//error
 	}
 	else if(rv == 0)
 	{
-		cout<<"Timeout receving packet from a node"<<endl;
+		cout<<"Timeout receving packet from a node"<<endl;//timeout
 	}
-	else if(FD_ISSET(udpSocket, &readfds))
+	else if(FD_ISSET(udpSocket, &readfds))//detected something from udpsocket
 	{
 		char buf[512];
 		fromlen = sizeof(senderAddr);
 		int result = recvfrom(udpSocket, buf, sizeof(buf), 0, (struct sockaddr*)&senderAddr, &fromlen);
-		if(result == -1)
+		if(result == -1)//result is how many bits the revieve got from the sender
 		{
 			cerr<<"Error recieving packet"<<endl;
 			cout<<strerror(errno)<<endl;
@@ -245,11 +245,13 @@ void receiveDistanceVector(){
 	
 		//should receive the routingTable from the sender in buf along with packet header
 	
+		//taking the header out of the buffer and putting it into a char array
 		char recvdPacketHeader[sizeof(packetHeader)];
 		memcpy(recvdPacketHeader, buf, sizeof(packetHeader));
 		packetHeader p;
 		memcpy(&p, recvdPacketHeader, sizeof(packetHeader));
-	
+		
+		//taking the map information out of the buffer
 		char recvdTableBuffer[PACKET_SIZE - sizeof(packetHeader)];
 		memcpy(recvdTableBuffer, buf + sizeof(packetHeader), sizeof(recvdTableBuffer));
 		map<int,routeStruct> recvdRoutingTable;
@@ -258,6 +260,7 @@ void receiveDistanceVector(){
 		int recvdIntNode[512];
 		int recvdDestNode[512];
 	
+		//putting the map information into 3 arrays for destination->intermediate node->distance
 		int ctr = 0;
 		for(int i = 0; i < PACKET_SIZE - sizeof(packetHeader); i++)
 		{
@@ -294,6 +297,7 @@ void receiveDistanceVector(){
 			}
 		}
 
+		//reconstructing the map
 		for(int i = 0; i < ctr; i++)
 		{
 			routeStruct recvdStruct;
@@ -302,6 +306,7 @@ void receiveDistanceVector(){
 			recvdRoutingTable.insert(pair<int,routeStruct>(recvdDestNode[i],recvdStruct));
 		}
 	
+		//update algorithm
 		updateRoutingTable(p.destNodeID,p.sourceNodeID,senderPort, recvdRoutingTable);
 	}
 }
