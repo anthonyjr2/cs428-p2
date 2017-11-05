@@ -121,11 +121,21 @@ int main(int argc, char *argv[])
 		exit(1);
 	}
 	
+	struct hostent *he;
+	he = gethostbyname(hostName.c_str());
+	if(he == NULL)
+	{
+		cerr<<"Error with gethostbyname in send"<<endl;
+		cerr<<h_errno<<endl;
+		exit(1);
+	}
+	
+	
 	struct sockaddr_in localAddr;
 	memset((char*)&localAddr, 0, sizeof(localAddr));
 	localAddr.sin_family = AF_INET;
 	localAddr.sin_port = htons(ctrlPort);
-	localAddr.sin_addr.s_addr = INADDR_ANY;
+	memcpy(&localAddr.sin_addr, he->h_addr, he->h_length);
 	
 	//bind the port to the socket we opened earlier
 	int result = bind(udpSocket, (struct sockaddr*)&localAddr, sizeof(localAddr));
@@ -144,7 +154,7 @@ int main(int argc, char *argv[])
 		{	
 			for(int i = 0; i < neighbors.size(); i++)
 			{
-				cout<<"Sending packet from node "<<thisNodeID<<" to node "<<neighbors.at(i)<<endl;
+				cout<<"["<<packetIDCtr<<"]"<<"Sending packet from node "<<thisNodeID<<" to node "<<neighbors.at(i)<<endl;
 				sendDistanceVector(neighbors.at(i));
 			}
 			start = Clock::now();
@@ -175,9 +185,9 @@ void sendDistanceVector(int destNodeID){
 	header.destNodeID = destNodeID;
 	header.packetID = packetIDCtr;
 	
-	int distanceToSend[routingTable.size()+1];
-	int nodesToSend[routingTable.size()+1];
-	int destinationsToSend[routingTable.size()+1];
+	int distanceToSend[routingTable.size()];
+	int nodesToSend[routingTable.size()];
+	int destinationsToSend[routingTable.size()];
 	for(int i = 0; i < routingTable.size(); i++)
 	{
 		nodesToSend[i] = routingTable[i].intermediateNode;
@@ -219,7 +229,7 @@ void receiveDistanceVector(){
 	FD_ZERO(&readfds);//reset the fd set each time so it works
 	FD_SET(udpSocket, &readfds);
 	
-	tv.tv_sec = 3;//timeout is 3 seconds
+	tv.tv_sec = 2;//timeout is 3 seconds
 	tv.tv_usec = 0;
 	int rv = select(udpSocket + 1, &readfds, NULL, NULL, &tv);//blocking and waiting for input from udp
 	if(rv == -1)
@@ -228,13 +238,13 @@ void receiveDistanceVector(){
 	}
 	else if(rv == 0)
 	{
-		cout<<"Timeout receving packet from a node"<<endl;//timeout
+		cout<<"[ERROR]Timeout"<<endl;//timeout
 	}
 	else if(FD_ISSET(udpSocket, &readfds))//detected something from udpsocket
 	{
-		char buf[512];
+		char buf[PACKET_SIZE];
 		fromlen = sizeof(senderAddr);
-		int result = recvfrom(udpSocket, buf, sizeof(buf), 0, (struct sockaddr*)&senderAddr, &fromlen);
+		int result = recvfrom(udpSocket, buf, PACKET_SIZE, 0, (struct sockaddr*)&senderAddr, &fromlen);
 		if(result == -1)//result is how many bits the revieve got from the sender
 		{
 			cerr<<"Error recieving packet"<<endl;
@@ -305,6 +315,7 @@ void receiveDistanceVector(){
 			recvdStruct.distance = recvdDist[i]; 
 			recvdRoutingTable.insert(pair<int,routeStruct>(recvdDestNode[i],recvdStruct));
 		}
+		cout<<"["<<packetIDCtr<<"]"<<"Node "<<nodeID<< " received packet from node "<<p.sourceNodeID<<endl;
 	
 		//update algorithm
 		updateRoutingTable(p.destNodeID,p.sourceNodeID,senderPort, recvdRoutingTable);
