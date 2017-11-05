@@ -54,7 +54,6 @@ typedef struct{
 int nodeID, ctrlPort, dataPort, packetIDCtr, udpSocket;
 string hostName;
 vector<int> neighbors;
-double difference;
 
 map<int,routeStruct> routingTable;
 map<int, nodeStruct> configTable;
@@ -62,17 +61,15 @@ map<int, nodeStruct> configTable;
 void sendDistanceVector(int destNodeID);
 void receiveDistanceVector();
 void updateRoutingTable(int destNodeID, int sourceNodeID, int senderPort, map<int, routeStruct> recvdRoutingTable);
-static double diffclock(clock_t clock1,clock_t clock2);
 
 int main(int argc, char *argv[])
-{
-	int thisNodeID = atoi(argv[2]);
-	
+{	
 	if(argc != 3)
 	{
 		cout<<"usage : "<<argv[0]<<" config.txt <nodeID>"<<endl;
 		exit(1);
 	}
+	int thisNodeID = atoi(argv[2]);
 	
 	ifstream inFile;
 	inFile.open(argv[1]);
@@ -82,50 +79,55 @@ int main(int argc, char *argv[])
 		exit(1);
 	}
 	string line;
-	while(getline(inFile, line))
+	while(getline(inFile, line)) //get each line of the config
 	{
 		istringstream in(line);
 		in>>nodeID>>hostName>>ctrlPort>>dataPort;
 		
-		nodeStruct ns;
+		nodeStruct ns; //instantiate a struct with the data we read so we have the config for later
 		ns.ctrlPort = ctrlPort;
 		ns.dataPort = dataPort;
 		ns.hostName = hostName;
 		configTable.insert(pair<int, nodeStruct> (nodeID, ns));
 		
-		if(nodeID == thisNodeID)
+		if(nodeID == thisNodeID) //if the line we are reading is our info
 		{
 			int n;
 			while(in>>n)
 			{
-				routeStruct neighbor;
-				neighbor.distance = 1;
+				routeStruct neighbor; //add the neighbors in that line to current node's routing table
+				neighbor.distance = 1; //neighbors have 1 distance
 				neighbor.intermediateNode = thisNodeID;
 				routingTable.insert(pair <int, routeStruct> (n, neighbor));
-				neighbors.push_back(n);
+				neighbors.push_back(n); //also add to our neighbors list to make it easier to send distance vectors
 			}
 		}
 	}
-	routeStruct thisNode;
+	routeStruct thisNode; //insert ourselves into the routing table
 	thisNode.distance = -1;
 	thisNode.intermediateNode = thisNodeID;
 	routingTable.insert(pair<int,routeStruct>(thisNodeID, thisNode));
 	inFile.close();
 	
-	struct sockaddr_in localAddr;
+	nodeID = thisNodeID;
+	ctrlPort = configTable[nodeID].ctrlPort;
+	dataPort = configTable[nodeID].dataPort; //set global variables to this node's info
+	hostName = configTable[nodeID].hostName;
 	
-	udpSocket = socket(AF_INET, SOCK_DGRAM, 0); //udp socket open
+	udpSocket = socket(AF_INET, SOCK_DGRAM, 0); //open a UDP socket for all connections
 	if(udpSocket == -1)
 	{
 		cerr<<strerror(errno)<<endl;
 		exit(1);
 	}
 	
+	struct sockaddr_in localAddr;
 	memset((char*)&localAddr, 0, sizeof(localAddr));
 	localAddr.sin_family = AF_INET;
 	localAddr.sin_port = htons(ctrlPort);
 	localAddr.sin_addr.s_addr = INADDR_ANY;
 	
+	//bind the port to the socket we opened earlier
 	int result = bind(udpSocket, (struct sockaddr*)&localAddr, sizeof(localAddr));
 	if(result < 0)
 	{
@@ -134,11 +136,11 @@ int main(int argc, char *argv[])
 		exit(1);
 	}
 	
-	auto start = Clock::now();
+	auto start = Clock::now(); //start a clock for sending
 	while(1)
 	{
 		auto diff = chrono::duration_cast<ms>(Clock::now() - start);
-		if(diff.count() > 2000)
+		if(diff.count() > 2000) //send every 2s
 		{	
 			for(int i = 0; i < neighbors.size(); i++)
 			{
@@ -147,7 +149,7 @@ int main(int argc, char *argv[])
 			}
 			start = Clock::now();
 		}
-		receiveDistanceVector();
+		receiveDistanceVector(); //receive distance vector if any are pending
 	}
 }
 
@@ -161,11 +163,12 @@ void sendDistanceVector(int destNodeID){
 	{
 		cerr<<"Error with gethostbyname in send"<<endl;
 		cerr<<h_errno<<endl;
+		exit(1);
 	}
 	
 	destAddr.sin_family = AF_INET;
-	destAddr.sin_port = htons(configTable[destNodeID].ctrlPort); //dest ctrl port and ip
-	memcpy(&destAddr.sin_addr, he->h_addr, he->h_length);
+	destAddr.sin_port = htons(configTable[destNodeID].ctrlPort); //dest ctrl port
+	memcpy(&destAddr.sin_addr, he->h_addr, he->h_length); //dest ip
 	
 	packetHeader header;
 	header.sourceNodeID = nodeID;
@@ -204,6 +207,7 @@ void sendDistanceVector(int destNodeID){
 		cout<<strerror(errno)<<endl;
 		exit(1);
 	}
+	packetIDCtr++;
 }
 void receiveDistanceVector(){
 	struct hostent *he;
@@ -224,9 +228,9 @@ void receiveDistanceVector(){
 	}
 	else if(rv == 0)
 	{
-		cout<<"Timeout on receving packet"<<endl;
+		cout<<"Timeout receving packet from a node"<<endl;
 	}
-	else
+	else if(FD_ISSET(udpSocket, &readfds))
 	{
 		char buf[512];
 		fromlen = sizeof(senderAddr);
