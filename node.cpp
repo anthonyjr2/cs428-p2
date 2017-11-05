@@ -19,7 +19,7 @@ using namespace std;
 
 //routing table 
 typedef struct{
-	int destinationNode;
+	int intermediateNode;
 	//int lastTraveledNode;
 	int distance;
 }routeStruct;
@@ -87,12 +87,16 @@ int main(int argc, char *argv[])
 			{
 				routeStruct neighbor;
 				neighbor.distance = 1;
-				neighbor.destinationNode = n;
+				neighbor.intermediateNode = thisNodeID;
 				routingTable.insert(pair <int, routeStruct> (n, neighbor));
 				neighbors.push_back(n);
 			}
 		}
 	}
+	routeStruct thisNode;
+	thisNode.distance = -1
+	thisNode.intermediateNode = thisNodeID;
+	routingTable.insert(pair<int,routeStruct>(thisNodeID, thisNode);
 	inFile.close();
 	
 	struct sockaddr_in localAddr;
@@ -252,12 +256,28 @@ void receiveDistanceVector(){
 	}
 	
 	
-	updateRoutingTable(p.destNodeID, recvdRoutingTable);
+	updateRoutingTable(p.destNodeID,p.sourceNodeID, recvdRoutingTable);
 }
 
-void updateRoutingTable(int nodeID, map<int, routeStruct> recvdRoutingTable)
+void updateRoutingTable(int nodeID, int sourceID map<int, routeStruct> recvdRoutingTable)
 {
+	//case 1: node in recvd routing table is not in this nodes routing table
+	map<int,routeStruct>::iterator it;
+	map <int, routeStruct>::iterator iter;
+	for(iter= recvdRoutingTable.begin();iter != recvdRoutingTable.end();iter++){P
+		it = routingTable.find(i);
+		if (it == routingTable.end()){
+			//found element
+			//there is a new node to put into our map
+			routeStruct case1RouteStruct;
+			case1RouteStruct.distance = iter.distance+1;
+			case1RouteStruct.intermediateNode = iter.intermediateNode;
+			routingTable.insert(pair<int,routeStruct>(iter->first,case1RouteStruct));
+		}
+	}
+	//case 2: there is more optimal route than we have stored in this routing table
 	
+	//case 3: 
 
 
 }
