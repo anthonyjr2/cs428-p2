@@ -60,6 +60,10 @@ map<int, nodeStruct> configTable;
 void sendDistanceVector(int destNodeID);
 void receiveDistanceVector();
 void updateRoutingTable(int destNodeID, int sourceNodeID, int senderPort, map<int, routeStruct> recvdRoutingTable);
+void sendDataPacket(int destNodeID);
+void receiveDataPacket();
+void startControlThread();
+void startDataThread();
 
 int main(int argc, char *argv[])
 {	
@@ -145,6 +149,14 @@ int main(int argc, char *argv[])
 		exit(1);
 	}
 	
+	thread(startControlThread());
+	thread(startDataThread());
+	
+
+}
+
+void startControlThread()
+{
 	auto start = Clock::now(); //start a clock for sending
 	while(1)
 	{
@@ -159,6 +171,25 @@ int main(int argc, char *argv[])
 			start = Clock::now();
 		}
 		receiveDistanceVector(); //receive distance vector if any are pending
+	}
+}
+
+void startDataThread()
+{
+	auto start = Clock::now(); //start a clock for sending
+	while(1)
+	{
+		auto diff = chrono::duration_cast<ms>(Clock::now() - start);
+		if(diff.count() > 2000) //send every 2s
+		{	
+			for(int i = 0; i < neighbors.size(); i++)
+			{
+				cout<<"["<<packetIDCtr<<"]"<<"Sending packet from node "<<thisNodeID<<" to node "<<neighbors.at(i)<<endl;
+				sendDistanceVector(neighbors.at(i));
+			}
+			start = Clock::now();
+		}
+		receiveDataPacket(); //receive distance vector if any are pending
 	}
 }
 
@@ -338,6 +369,17 @@ void updateRoutingTable(int destNodeID, int sourceNodeID, int senderPort, map<in
 	}
 }
 
+void receiveDataPacket()
+{
+	cout<<"In receiving data packet..."<<endl;
+	sleep(2);
+}
+
+void sendDataPacket(int destNodeID)
+{
+	cout<<"In sending data packet..."<<endl;
+	sleep(2);
+}
 
 
 
