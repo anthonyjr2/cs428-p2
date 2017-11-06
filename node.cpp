@@ -314,7 +314,7 @@ void updateRoutingTable(int destNodeID, int sourceNodeID, int senderPort, map<in
 			routingTable.insert(pair<int,routeStruct>(iter->first,case1RouteStruct));
 		}
 	}
-	/*//case 2: there is more optimal route than we have stored in this routing table
+	//case 2: there is more optimal route than we have stored in this routing table
 	for(iter = recvdRoutingTable.begin(); iter != recvdRoutingTable.end();iter++){
 		it = routingTable.find(iter->first);
 		if (it != routingTable.end()){
@@ -323,7 +323,7 @@ void updateRoutingTable(int destNodeID, int sourceNodeID, int senderPort, map<in
 				it->second.intermediateNode = iter->second.intermediateNode;
 			}
 		}
-	}*/
+	}
 	//case 3: distance vector coming in on same port so we have to update
 	if(senderPort == ctrlPort){
 		for(iter = recvdRoutingTable.begin(); iter != recvdRoutingTable.end();iter++){
