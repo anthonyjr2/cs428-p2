@@ -30,7 +30,6 @@ typedef struct{
 	uint8_t sourceNodeID;
 	uint8_t destNodeID;
 	uint8_t packetID;
-	int otherSize;
 }packetHeader;
 
 typedef struct
@@ -185,30 +184,31 @@ void sendDistanceVector(int destNodeID){
 	header.destNodeID = destNodeID;
 	header.packetID = packetIDCtr;
 	
-	int distanceToSend[routingTable.size()];
-	int nodesToSend[routingTable.size()];
-	int destinationsToSend[routingTable.size()];
-	for(int i = 0; i < routingTable.size(); i++)
+	char distanceToSend[(PACKET_SIZE - sizeof(header))/2];
+	char destinationsToSend[(PACKET_SIZE - sizeof(header))/2];
+	
+	
+	int i = 0;
+	map <int, routeStruct>::iterator iter;
+	for(iter= routingTable.begin();iter != routingTable.end();iter++)
 	{
-		nodesToSend[i] = routingTable[i].intermediateNode;
+		distanceToSend[i] = iter->second.distance;
+		i++;
 	}
-	for(int i = 0; i < routingTable.size(); i++)
+	distanceToSend[i] = -1;
+
+	i = 0;
+	for(iter= routingTable.begin();iter != routingTable.end();iter++)
 	{
-		distanceToSend[i] = routingTable[i].distance;
+		destinationsToSend[i] = iter->first;
+		i++;
 	}
-	for(int i = 0; i < routingTable.size(); i++)
-	{
-		destinationsToSend[i] = routingTable[i].distance;
-	}
-	nodesToSend[-1] = -1;
-	distanceToSend[-1] = -1;
-	destinationsToSend[-1] = -1;
+	destinationsToSend[i] = -1;
 	
 	char packet[PACKET_SIZE];
 	memcpy(packet, &header, sizeof(header));
-	memcpy(packet + sizeof(header), &nodesToSend, sizeof(nodesToSend));
-	memcpy(packet + sizeof(header) + sizeof(nodesToSend), &distanceToSend, sizeof(distanceToSend));
-	memcpy(packet + sizeof(header) + sizeof(nodesToSend) + sizeof(distanceToSend), &destinationsToSend, sizeof(destinationsToSend));
+	memcpy(packet + sizeof(header), &distanceToSend, sizeof(distanceToSend));
+	memcpy(packet + sizeof(header) + sizeof(distanceToSend), &destinationsToSend, sizeof(destinationsToSend));
 
 	int result = sendto(udpSocket, packet, PACKET_SIZE, 0, (struct sockaddr*)&destAddr, sizeof(destAddr));
 	if(result == -1)
@@ -229,7 +229,7 @@ void receiveDistanceVector(){
 	FD_ZERO(&readfds);//reset the fd set each time so it works
 	FD_SET(udpSocket, &readfds);
 	
-	tv.tv_sec = 2;//timeout is 3 seconds
+	tv.tv_sec = 3;//timeout is 3 seconds
 	tv.tv_usec = 0;
 	int rv = select(udpSocket + 1, &readfds, NULL, NULL, &tv);//blocking and waiting for input from udp
 	if(rv == -1)
@@ -260,62 +260,31 @@ void receiveDistanceVector(){
 		memcpy(recvdPacketHeader, buf, sizeof(packetHeader));
 		packetHeader p;
 		memcpy(&p, recvdPacketHeader, sizeof(packetHeader));
-		
-		//taking the map information out of the buffer
-		char recvdTableBuffer[PACKET_SIZE - sizeof(packetHeader)];
-		memcpy(recvdTableBuffer, buf + sizeof(packetHeader), sizeof(recvdTableBuffer));
+	
+		char recvdDist[(PACKET_SIZE - sizeof(packetHeader))/2];
+		char recvdDestNode[(PACKET_SIZE - sizeof(packetHeader))/2];
+		memcpy(recvdDist, buf + sizeof(packetHeader), sizeof(recvdDist));
+		memcpy(recvdDestNode, buf + sizeof(packetHeader) + sizeof(recvdDist), sizeof(recvdDestNode));
 		map<int,routeStruct> recvdRoutingTable;
-	
-		int recvdDist[512];
-		int recvdIntNode[512];
-		int recvdDestNode[512];
-	
-		//putting the map information into 3 arrays for destination->intermediate node->distance
-		int ctr = 0;
-		for(int i = 0; i < PACKET_SIZE - sizeof(packetHeader); i++)
-		{
-			if(recvdTableBuffer[i] != -1)
-			{
-				recvdIntNode[i] = recvdTableBuffer[i];
-				ctr++;
-			}
-			else
-			{
-				for(int k = i+1; k < PACKET_SIZE - sizeof(packetHeader); k++)
-				{
-					if(recvdTableBuffer[k] != -1)
-					{
-						recvdDist[k] = recvdTableBuffer[k];
-					}
-					else
-					{
-						for(int j = k+1; j < PACKET_SIZE - sizeof(packetHeader); j++)
-						{
-							if(recvdTableBuffer[j] != -1)
-							{
-								recvdDestNode[j] = recvdTableBuffer[j];
-							}
-							else
-							{
-								break;
-							}
-						}
-						break;
-					}
-				}
-				break;
-			}
-		}
 
 		//reconstructing the map
-		for(int i = 0; i < ctr; i++)
+		int i = 0;
+		while(recvdDestNode[i] != -1)
 		{
 			routeStruct recvdStruct;
-			recvdStruct.intermediateNode = recvdIntNode[i];
-			recvdStruct.distance = recvdDist[i]; 
+			recvdStruct.distance = recvdDist[i];
+			cout<<"recvdDist is "<<unsigned(recvdDist[i])<<endl;;
+			recvdStruct.intermediateNode = unsigned(p.sourceNodeID);
 			recvdRoutingTable.insert(pair<int,routeStruct>(recvdDestNode[i],recvdStruct));
+			i++;
 		}
-		cout<<"["<<packetIDCtr<<"]"<<"Node "<<nodeID<< " received packet from node "<<p.sourceNodeID<<endl;
+		
+		cout<<"["<<packetIDCtr<<"]"<<"Node "<<nodeID<< " received packet from node "<<unsigned(p.sourceNodeID)<<endl;
+
+		for(auto it = recvdRoutingTable.cbegin(); it != recvdRoutingTable.cend(); ++it)
+		{
+			std::cout << it->first << " " << it->second.intermediateNode << " " << it->second.distance << "\n";
+		}
 	
 		//update algorithm
 		updateRoutingTable(p.destNodeID,p.sourceNodeID,senderPort, recvdRoutingTable);
@@ -326,7 +295,7 @@ void updateRoutingTable(int destNodeID, int sourceNodeID, int senderPort, map<in
 {
 	//case 1: node in recvd routing table is not in this nodes routing table
 	map<int,routeStruct>::iterator it;
-	map <int, routeStruct>::iterator iter;
+	map <int, routeStruct>::iterator iter; //received table iterator
 	for(iter= recvdRoutingTable.begin();iter != recvdRoutingTable.end();iter++){
 		it = routingTable.find(iter->first);
 		if (it == routingTable.end()){
@@ -342,7 +311,7 @@ void updateRoutingTable(int destNodeID, int sourceNodeID, int senderPort, map<in
 	for(iter = recvdRoutingTable.begin(); iter != recvdRoutingTable.end();iter++){
 		it = routingTable.find(iter->first);
 		if (it != routingTable.end()){
-			if(it->second.distance < iter->second.distance+1){
+			if(it->second.distance > iter->second.distance+1){
 				it->second.distance = iter->second.distance+1;
 				it->second.intermediateNode = iter->second.intermediateNode;
 			}
