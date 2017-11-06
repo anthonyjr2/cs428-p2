@@ -10,9 +10,12 @@
 #include <vector>
 #include <map>
 
+#define PACKET_SIZE 1024
+
 using namespace std;
 
 int packetCounter = 0;
+int udpSocket;
 
 class node{
 	public:
@@ -44,65 +47,93 @@ typedef struct{
 }dataPacketPayload;
 
 int main(int argc, char *argv[]){
-	vector<node>nodeList;
+	
 	
 	if(argc < 2){
 		cout<<"usage : "<<argv[0]<<" config.txt"<<endl;
 		exit(1);
 	}
-	
+	vector<node>nodeList = initialize(argv[1]);
+	string command;
+	int node1, node2;
+	struct sockaddr_in localAddr;
 
-	if(argv[2] == "generate-packet"){
-		if(generatePacket(atoi(argv[3]),atoi(argv[4]),nodeList) == -1){
-			cout <<"Error sending packet"<<endl;
-			exit(1);
+	udpSocket = socket(AF_INET, SOCK_DGRAM, 0); //open a UDP socket for all connections
+	if(udpSocket == -1){
+		cerr<<strerror(errno)<<endl;
+		exit(1);
+	}
+
+	
+	localAddr.sin_family = AF_INET;
+	localAddr.sin_port = htons(0);
+	inet_pton(AF_INET, INADDR_ANY, &localAddr.sin_addr);
+
+	bind(udpSocket, (struct sockaddr*)&localAddr, sizeof localAddr);
+
+	while(1){
+		cin >> command >> node1 >> node2;
+		if(command == "generate-packet"){
+			if(generatePacket(node1,node2) == -1){
+				cout <<"Error sending packet"<<endl;
+				exit(1);
+			}
+		}else if(command == "create-link"){
+			if(createLink(node1,node2) == -1){
+				cout << "Error creating link" << endl;
+				exit(1);
+			}
+		}else if(command == "remove-Link"){
+			if(removeLink(node1,node2)==-1){
+				cout << "Error removing link" << endl;
+				exit(1);
+			}	
 		}
-	}else if(argv[2] == "create-link"){
-		if(createLink(atoi(argv[3]),atoi(argv[4])) == -1){
-			cout << "Error creating link" << endl;
-			exit(1);
-		}
-	}else if(argv[2] == "remove-Link"){
-		if(removeLink(atoi(argv[3]),atoi(argv[4]))==-1){
-			cout << "Error removing link" << endl;
-			exit(1);
-		}
-	}else{
-		nodeList = initialize(argv[2]);
-		
 	}
 
 }
 
 int generatePacket(int sender,int reciever,nodeList){
-	string host = "";
+	string host;
+	struct sockaddr_in destAddr;
+	struct hostent *he;
+	struct in_addr **addr_list;
 	//step 1 create control packet
 	controlPacketHeader newControlHeader;
-	controlPacketPayload newControlPayLoad;
+	//controlPacketPayload newControlPayLoad;
+	node sendingNode;
 	//step 2 find the info for the sender packet
 	for(int i = 0; i < nodeList.size();i++){
 		if(nodeList[i].nodeid == sender){
 			//we have found our man
-			node temp = nodeList[i];
-			newControlHeader.sourceNodeID = temp.nodeid;
+			sendingNode = nodeList[i];
+			newControlHeader.sourceNodeID = sender;
 			newControlHeader.destNodeID = reciever;
 			newControlHeader.packetID = packetCounter;
+			packetCounter++;
 			newControlHeader.TTL = 15;
-			host = temp.hostName;
+			host = sendingNode.hostName;
 			break;
 		}
 	}
-	newControlPayload.pathToTravel[0] = sender;
-	newControlPayload.pathToTravel[1] = reciever;
+	//newControlPayload.pathToTravel[0] = sender;
+	//newControlPayload.pathToTravel[1] = reciever;
 	//step 3 send that shit
-	// now with UDP datagram sockets:
-	//getaddrinfo(...
-	
-	//dest = ...  // assume "dest" holds the address of the destination
-	//dgram_socket = socket(...
 
-	// send secret message normally:
-	sendto(dgram_socket, secret_message, strlen(secret_message)+1, 0, (struct sockaddr*)&dest, sizeof dest);
+	he = gethostbyname(sendingNode.hostName.c_str());
+	destAddr.sin_family = AF_INET;
+	destAddr.sin_port = htons(sendingNode.ctrlPort); //dest ctrl port
+	memcpy(&destAddr.sin_addr, he->h_addr, he->h_length); //dest ip	
+
+	char packet[PACKET_SIZE];
+	memcpy(packet, &header, sizeof(header));
+
+	int result = sendto(udpSocket, packet, PACKET_SIZE, 0, (struct sockaddr*)&destAddr, sizeof(destAddr));
+	if(result == -1){
+		cerr<<"Error sending packet"<<endl;
+		cout<<strerror(errno)<<endl;
+		exit(1);
+	}
 }
 
 int createLink(int node1, int node2){
@@ -135,5 +166,6 @@ int initialize(string file){
 	inFile.close();
 	return nodeList;
 }
+
 
 
