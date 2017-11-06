@@ -103,7 +103,7 @@ int main(int argc, char *argv[])
 		}
 	}
 	routeStruct thisNode; //insert ourselves into the routing table
-	thisNode.distance = -1;
+	thisNode.distance = 0;
 	thisNode.intermediateNode = thisNodeID;
 	routingTable.insert(pair<int,routeStruct>(thisNodeID, thisNode));
 	inFile.close();
@@ -273,7 +273,6 @@ void receiveDistanceVector(){
 		{
 			routeStruct recvdStruct;
 			recvdStruct.distance = recvdDist[i];
-			cout<<"recvdDist is "<<unsigned(recvdDist[i])<<endl;;
 			recvdStruct.intermediateNode = unsigned(p.sourceNodeID);
 			recvdRoutingTable.insert(pair<int,routeStruct>(recvdDestNode[i],recvdStruct));
 			i++;
@@ -281,13 +280,21 @@ void receiveDistanceVector(){
 		
 		cout<<"["<<packetIDCtr<<"]"<<"Node "<<nodeID<< " received packet from node "<<unsigned(p.sourceNodeID)<<endl;
 
-		for(auto it = recvdRoutingTable.cbegin(); it != recvdRoutingTable.cend(); ++it)
+		//print out the routing table we received
+		/*for(auto it = recvdRoutingTable.cbegin(); it != recvdRoutingTable.cend(); ++it)
 		{
 			std::cout << it->first << " " << it->second.intermediateNode << " " << it->second.distance << "\n";
-		}
+		}*/
 	
 		//update algorithm
 		updateRoutingTable(p.destNodeID,p.sourceNodeID,senderPort, recvdRoutingTable);
+		
+		//print out our updated routing table
+		for(auto it = routingTable.cbegin(); it != routingTable.cend(); ++it)
+		{
+			std::cout << it->first << " " << it->second.intermediateNode << " " << it->second.distance << "\n";
+		}
+		
 	}
 }
 
@@ -307,7 +314,7 @@ void updateRoutingTable(int destNodeID, int sourceNodeID, int senderPort, map<in
 			routingTable.insert(pair<int,routeStruct>(iter->first,case1RouteStruct));
 		}
 	}
-	//case 2: there is more optimal route than we have stored in this routing table
+	/*//case 2: there is more optimal route than we have stored in this routing table
 	for(iter = recvdRoutingTable.begin(); iter != recvdRoutingTable.end();iter++){
 		it = routingTable.find(iter->first);
 		if (it != routingTable.end()){
@@ -316,7 +323,7 @@ void updateRoutingTable(int destNodeID, int sourceNodeID, int senderPort, map<in
 				it->second.intermediateNode = iter->second.intermediateNode;
 			}
 		}
-	}
+	}*/
 	//case 3: distance vector coming in on same port so we have to update
 	if(senderPort == ctrlPort){
 		for(iter = recvdRoutingTable.begin(); iter != recvdRoutingTable.end();iter++){
