@@ -150,26 +150,94 @@ int createLink(int node1, int node2){
 	struct in_addr **addr_list;
 	//step 1 create control packet
 	controlPacketHeader newControlHeader;
-	node sendingNode;
+	node sendingNode1, sendingNode2;
 	//step 2 find the info for the sender packet
 	for(int i = 0; i < nodeList.size();i++){
-		if(nodeList[i].nodeid == sender){
+		if(nodeList[i].nodeid == node1){
 			//we have found our man
-			sendingNode = nodeList[i];
-			newControlHeader.sourceNodeID = sender;
-			newControlHeader.destNodeID = reciever;
+			sendingNode1 = nodeList[i];
+			newControlHeader.sourceNodeID = node1;
+			newControlHeader.destNodeID = node2;
 			newControlHeader.packetID = packetCounter;
-			newControlHeader.type = DATA_MESSAGE;
+			newControlHeader.type = ADD_LINK;
 			packetCounter++;
 			newControlHeader.TTL = 15;
 			host = sendingNode.hostName;
 			break;
 		}
 	}
+
+	/*for(int i = 0; i < nodeList.size();i++){
+		if(nodeList[i].nodeid == node2){
+			//we have found our man
+			sendingNode2 = nodeList[i];
+			newControlHeader.sourceNodeID = sender;
+			newControlHeader.destNodeID = reciever;
+			newControlHeader.packetID = packetCounter;
+			newControlHeader.type = ADD_LINK;
+			packetCounter++;
+			newControlHeader.TTL = 15;
+			host = sendingNode.hostName;
+			break;
+		}
+	}*/
+
+	he = gethostbyname(sendingNode.hostName.c_str());
+	destAddr.sin_family = AF_INET;
+	destAddr.sin_port = htons(sendingNode.ctrlPort); //dest ctrl port
+	memcpy(&destAddr.sin_addr, he->h_addr, he->h_length); //dest ip	
+
+	char packet[PACKET_SIZE];
+	memcpy(packet, &header, sizeof(header));
+
+	int result = sendto(udpSocket, packet, PACKET_SIZE, 0, (struct sockaddr*)&destAddr, sizeof(destAddr));
+	if(result == -1){
+		cerr<<"Error sending packet"<<endl;
+		cout<<strerror(errno)<<endl;
+		exit(1);
+	}
 }
 
 int removeLink(int node1, int node2){
+	//tell nodes to get info from the config table
+	//send one message to each node, telling it to look at the other's information 
+	string host;
+	struct sockaddr_in destAddr;
+	struct hostent *he;
+	struct in_addr **addr_list;
+	//step 1 create control packet
+	controlPacketHeader newControlHeader;
+	node sendingNode1, sendingNode2;
+	//step 2 find the info for the sender packet
+	for(int i = 0; i < nodeList.size();i++){
+		if(nodeList[i].nodeid == node1){
+			//we have found our man
+			sendingNode1 = nodeList[i];
+			newControlHeader.sourceNodeID = node1;
+			newControlHeader.destNodeID = node2;
+			newControlHeader.packetID = packetCounter;
+			newControlHeader.type = DELETE_LINK;
+			packetCounter++;
+			newControlHeader.TTL = 15;
+			host = sendingNode.hostName;
+			break;
+		}
+	}
 
+	he = gethostbyname(sendingNode.hostName.c_str());
+	destAddr.sin_family = AF_INET;
+	destAddr.sin_port = htons(sendingNode.ctrlPort); //dest ctrl port
+	memcpy(&destAddr.sin_addr, he->h_addr, he->h_length); //dest ip	
+
+	char packet[PACKET_SIZE];
+	memcpy(packet, &header, sizeof(header));
+
+	int result = sendto(udpSocket, packet, PACKET_SIZE, 0, (struct sockaddr*)&destAddr, sizeof(destAddr));
+	if(result == -1){
+		cerr<<"Error sending packet"<<endl;
+		cout<<strerror(errno)<<endl;
+		exit(1);
+	}
 }
 
 int initialize(string file){
