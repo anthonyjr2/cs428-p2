@@ -55,6 +55,8 @@ int nodeID, ctrlPort, dataPort, packetIDCtr, udpSocket;
 string hostName;
 vector<int> neighbors;
 
+bool dataToSend = false;
+
 map<int,routeStruct> routingTable;
 map<int, nodeStruct> configTable;
 
@@ -150,9 +152,11 @@ int main(int argc, char *argv[])
 		exit(1);
 	}
 	
-	thread(startControlThread());
-	thread(startDataThread());
+	thread cntrlThread(startControlThread());
+	thread dataThread(startDataThread());
 	
+	cntrlThread.join();
+	dataThread.join();
 
 }
 
@@ -177,18 +181,12 @@ void startControlThread()
 
 void startDataThread()
 {
-	auto start = Clock::now(); //start a clock for sending
 	while(1)
 	{
-		auto diff = chrono::duration_cast<ms>(Clock::now() - start);
-		if(diff.count() > 2000) //send every 2s
-		{	
-			for(int i = 0; i < neighbors.size(); i++)
-			{
-				cout<<"["<<packetIDCtr<<"]"<<"Sending packet from node "<<thisNodeID<<" to node "<<neighbors.at(i)<<endl;
-				sendDistanceVector(neighbors.at(i));
-			}
-			start = Clock::now();
+	//lock around outside of if
+		if(dataToSend)
+		{
+			sendDataPacket();
 		}
 		receiveDataPacket(); //receive distance vector if any are pending
 	}
