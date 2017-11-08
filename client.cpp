@@ -11,6 +11,9 @@
 #include <map>
 
 #define PACKET_SIZE 1024
+#define DATA_MESSAGE 2
+#define ADD_LINK 3
+#define DELETE_LINK 4
 
 using namespace std;
 
@@ -28,7 +31,7 @@ typedef struct{
 	uint8_t sourceNodeID;
 	uint8_t destNodeID;
 	uint8_t packetID;
-	uint8_t TTL;
+	uint8_t type;
 }controlPacketHeader;
 
 typedef struct{
@@ -110,6 +113,7 @@ int generatePacket(int sender,int reciever,nodeList){
 			newControlHeader.sourceNodeID = sender;
 			newControlHeader.destNodeID = reciever;
 			newControlHeader.packetID = packetCounter;
+			newControlHeader.type = DATA_MESSAGE;
 			packetCounter++;
 			newControlHeader.TTL = 15;
 			host = sendingNode.hostName;
@@ -118,6 +122,7 @@ int generatePacket(int sender,int reciever,nodeList){
 	}
 	//newControlPayload.pathToTravel[0] = sender;
 	//newControlPayload.pathToTravel[1] = reciever;
+	//dont think we need a payload here because all the needed info is in the header
 	//step 3 send that shit
 
 	he = gethostbyname(sendingNode.hostName.c_str());
@@ -137,7 +142,30 @@ int generatePacket(int sender,int reciever,nodeList){
 }
 
 int createLink(int node1, int node2){
-	
+	//tell nodes to get info from the config table
+	//send one message to each node, telling it to look at the other's information 
+	string host;
+	struct sockaddr_in destAddr;
+	struct hostent *he;
+	struct in_addr **addr_list;
+	//step 1 create control packet
+	controlPacketHeader newControlHeader;
+	node sendingNode;
+	//step 2 find the info for the sender packet
+	for(int i = 0; i < nodeList.size();i++){
+		if(nodeList[i].nodeid == sender){
+			//we have found our man
+			sendingNode = nodeList[i];
+			newControlHeader.sourceNodeID = sender;
+			newControlHeader.destNodeID = reciever;
+			newControlHeader.packetID = packetCounter;
+			newControlHeader.type = DATA_MESSAGE;
+			packetCounter++;
+			newControlHeader.TTL = 15;
+			host = sendingNode.hostName;
+			break;
+		}
+	}
 }
 
 int removeLink(int node1, int node2){

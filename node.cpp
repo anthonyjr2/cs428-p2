@@ -30,6 +30,7 @@ typedef struct{
 	uint8_t sourceNodeID;
 	uint8_t destNodeID;
 	uint8_t packetID;
+	uint8_t type;
 }packetHeader;
 
 typedef struct
