@@ -166,7 +166,7 @@ void startControlThread()
 		{
 			for(int i = 0; i < neighbors.size(); i++)
 			{
-				cout<<"["<<packetIDCtr<<"]"<<"Sending packet from node "<<nodeID<<" to node "<<neighbors.at(i)<<endl;
+				//cout<<"["<<packetIDCtr<<"]"<<"Sending packet from node "<<nodeID<<" to node "<<neighbors.at(i)<<endl;
 				sendDistanceVector(neighbors.at(i));
 			}
 			start = Clock::now();
@@ -266,7 +266,7 @@ void receiveDistanceVector(){
 	}
 	else if(rv == 0)
 	{
-		cout<<"[ERROR]Timeout"<<endl;//timeout
+		//cout<<"[ERROR]Timeout"<<endl;//timeout
 	}
 	else if(FD_ISSET(udpSocket, &readfds))//detected something from udpsocket
 	{
@@ -300,9 +300,9 @@ void receiveDistanceVector(){
 			{
 				controlDestinationNode = p.destNodeID;
 				//set flag to send stuff out now
-				sendFlagMutex.lock()
+				sendFlagMutex.lock();
 				dataToSend = true;
-				sendFlagMutex.unlock()
+				sendFlagMutex.unlock();
 			}
 		}
 		else
@@ -325,7 +325,7 @@ void receiveDistanceVector(){
 				i++;
 			}
 		
-			cout<<"["<<packetIDCtr<<"]"<<"Node "<<nodeID<< " received packet from node "<<unsigned(p.sourceNodeID)<<endl;
+			//cout<<"["<<packetIDCtr<<"]"<<"Node "<<nodeID<< " received packet from node "<<unsigned(p.sourceNodeID)<<endl;
 	
 			//update algorithm
 			updateRoutingTable(p.destNodeID,p.sourceNodeID,senderPort, recvdRoutingTable);
@@ -382,29 +382,83 @@ void updateRoutingTable(int destNodeID, int sourceNodeID, int senderPort, map<in
 
 void receiveDataPacket()
 {
-	cout<<"In receiving data packet..."<<endl;
-	sleep(2);
-	//check if we are the destination
-	if(p.destNodeID == nodeID)
+	struct hostent *he;
+	struct sockaddr_in senderAddr;
+	socklen_t fromlen;
+	struct timeval tv;
+
+	fd_set readfds; //fd_set for select
+	FD_ZERO(&readfds);//reset the fd set each time so it works
+	FD_SET(udpSocket, &readfds);
+
+	tv.tv_sec = 3;//timeout is 3 seconds
+	tv.tv_usec = 0;
+	int rv = select(udpSocket + 1, &readfds, NULL, NULL, &tv);//blocking and waiting
+	if(rv == -1)
 	{
-		//we're done
+		cerr<<"Select error"<<endl;//error
 	}
-	else
+	else if(rv == 0)
 	{
-		//add ourselves into the payload and forward
+		//cout<<"[ERROR]Timeout"<<endl;//timeout
 	}
-	
-	
+	else if(FD_ISSET(udpSocket, &readfds))//detected something from udpsocket
+	{
+		char buf[PACKET_SIZE];
+		fromlen = sizeof(senderAddr);
+		int result = recvfrom(udpSocket, buf, PACKET_SIZE, 0, (struct sockaddr*)&senderAddr, &fromlen);
+		if(result == -1)//result is how many bits the revieve got from the sender
+		{
+			cerr<<"Error recieving packet"<<endl;
+			cout<<strerror(errno)<<endl;
+			exit(1);
+		}
+
+		packetHeader p;
+		memcpy(&p, buf, sizeof(packetHeader));
+		
+		cout<<"[] Node "<<nodeID<<" received packet from node "<<p.sourceNodeID<<endl;
+		
+		//check if we are the destination
+		if(p.destNodeID == nodeID)
+		{
+			//we're done
+		}
+		else
+		{
+		
+			if(p.TTL <= 0)
+			{
+				cout<<"TTL has become 0, destroying packet"<<endl;
+			}
+			else
+			{
+				char payload[PACKET_SIZE - sizeof(packetHeader)];
+				memcpy(payload, buf + sizeof(packetHeader), sizeof(payload));
+			
+				int index = 15 - p.TTL;
+				payload[index] = nodeID;
+			
+				char packet[PACKET_SIZE];
+				p.TTL--;
+				memcpy(packet, &p, sizeof(packetHeader));
+				memcpy(packet + sizeof(packetHeader), &payload, sizeof(payload));
+				cout<<"[] Node "<<nodeID<<" forwarding packet from node "<<p.sourceNodeID<<" to node  "<<p.destNodeID<<endl;
+				sendDataPacket(packet);
+			}
+		}
+	}
 }
 
 void buildDataPacket(int destNodeID)
 {
-	struct sockaddr_in destAddr;
-	struct hostent *he;
-	
 	//check our routing table for the destination
 	//forward it
-	if(routingTable[destNodeID])
+	if(routingTable.find(destNodeID) == routingTable.end())
+	{
+		cout<<destNodeID<<" is not in this node's routing table (should not happen)"<<endl;
+	}
+	else
 	{
 		packetHeader header;
 		header.sourceNodeID = nodeID;
@@ -417,18 +471,16 @@ void buildDataPacket(int destNodeID)
 		char packet[PACKET_SIZE];
 		memcpy(packet, &header, sizeof(header));
 		memcpy(packet + sizeof(header), &payload, sizeof(payload));
+		cout<<"[] Node "<<nodeID<<" generated packet to node "<<destNodeID<<endl;
 		sendDataPacket(packet);
-		
 	}
-	else
-	{
-		//die
-	}
-	
 }
 
 void sendDataPacket(char packet[PACKET_SIZE])
 {
+	struct sockaddr_in destAddr;
+	struct hostent *he;
+	
 	packetHeader p;
 	memcpy(&p, packet, sizeof(packetHeader));
 
