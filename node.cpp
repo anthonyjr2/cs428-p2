@@ -443,12 +443,23 @@ void receiveDataPacket()
 		packetHeader p;
 		memcpy(&p, buf, sizeof(packetHeader));
 		
-		cout<<"[] Node "<<nodeID<<" received packet from node "<<p.sourceNodeID<<endl;
+		cout<<"[] Node "<<nodeID<<" received packet from node "<<unsigned(p.sourceNodeID)<<endl;
 		
 		//check if we are the destination
 		if(p.destNodeID == nodeID)
 		{
-			//we're done
+			char payload[PACKET_SIZE - sizeof(packetHeader)];
+			memcpy(payload, buf + sizeof(packetHeader), sizeof(payload));
+			
+			int index = 15 - p.TTL;
+			payload[index] = nodeID;
+			
+			cout<<"Packet received, forwarding table: ";
+			for(int i = 0; i < index; i++)
+			{
+				cout<<unsigned(payload[i])<<" ";
+			}
+			cout<<endl<<"End of path."<<endl;
 		}
 		else
 		{
@@ -469,7 +480,7 @@ void receiveDataPacket()
 				p.TTL--;
 				memcpy(packet, &p, sizeof(packetHeader));
 				memcpy(packet + sizeof(packetHeader), &payload, sizeof(payload));
-				cout<<"[] Node "<<nodeID<<" forwarding packet from node "<<unsigned(p.sourceNodeID)<<" to node  "<<unsigned(p.destNodeID)<<endl;
+				cout<<"[] Node "<<nodeID<<" forwarding packet from node "<<unsigned(p.sourceNodeID)<<" to node "<<unsigned(p.destNodeID)<<endl;
 				sendDataPacket(packet);
 			}
 		}
@@ -480,7 +491,7 @@ void buildDataPacket(int destNodeID)
 {
 	//check our routing table for the destination
 	//forward it
-	routingLock.lock()
+	routingLock.lock();
 	bool res = routingTable.find(destNodeID) == routingTable.end();
 	routingLock.unlock();
 	if(res)
@@ -509,28 +520,44 @@ void sendDataPacket(char packet[PACKET_SIZE])
 {
 	struct sockaddr_in destAddr;
 	struct hostent *he;
-	
+
 	packetHeader p;
 	memcpy(&p, packet, sizeof(packetHeader));
-
-	he = gethostbyname(configTable[p.destNodeID].hostName.c_str());
-	if(he == NULL)
-	{
-		cerr<<"Error with gethostbyname in send"<<endl;
-		cerr<<h_errno<<endl;
-		exit(1);
-	}
 	
-	destAddr.sin_family = AF_INET;
-	destAddr.sin_port = htons(configTable[p.destNodeID].dataPort); //dest ctrl port
-	memcpy(&destAddr.sin_addr, he->h_addr, he->h_length); //dest ip
-
-	int result = sendto(dataSocket, packet, PACKET_SIZE, 0, (struct sockaddr*)&destAddr, sizeof(destAddr));
-	if(result == -1)
+	routingLock.lock();
+	bool res = routingTable.find(p.destNodeID) == routingTable.end();
+	routingLock.unlock();
+	if(res)
 	{
-		cerr<<"Error sending data packet"<<endl;
-		cout<<strerror(errno)<<endl;
-		exit(1);
+		cout<<"Couldn't find destination in routing table (wat)"<<endl;
+	}
+	else
+	{
+		int destNodeSend = routingTable[p.destNodeID].intermediateNode;
+		if(routingTable[p.destNodeID].intermediateNode == nodeID)
+		{
+			destNodeSend = p.destNodeID;
+		}
+
+		he = gethostbyname(configTable[destNodeSend].hostName.c_str());
+		if(he == NULL)
+		{
+			cerr<<"Error with gethostbyname in send"<<endl;
+			cerr<<h_errno<<endl;
+			exit(1);
+		}
+	
+		destAddr.sin_family = AF_INET;
+		destAddr.sin_port = htons(configTable[destNodeSend].dataPort); //dest ctrl port
+		memcpy(&destAddr.sin_addr, he->h_addr, he->h_length); //dest ip
+
+		int result = sendto(dataSocket, packet, PACKET_SIZE, 0, (struct sockaddr*)&destAddr, sizeof(destAddr));
+		if(result == -1)
+		{
+			cerr<<"Error sending data packet"<<endl;
+			cout<<strerror(errno)<<endl;
+			exit(1);
+		}
 	}
 }
 
