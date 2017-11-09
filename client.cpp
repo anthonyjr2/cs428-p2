@@ -117,6 +117,7 @@ int generatePacket(int sender,int reciever,vector<node>nodeList){
 	controlPacketHeader newControlHeader;
 	//controlPacketPayload newControlPayLoad;
 	node sendingNode;
+
 	//step 2 find the info for the sender packet
 	for(int i = 0; i < nodeList.size();i++){
 		if(nodeList[i].nodeid == sender){
@@ -137,8 +138,7 @@ int generatePacket(int sender,int reciever,vector<node>nodeList){
 	//step 3 send that shit
 
 	he = gethostbyname(sendingNode.hostName.c_str());
-	if(he == NULL)q
-	{
+	if(he == NULL){
 		cerr<<"Error with gethostbyname in send"<<endl;
 		cerr<<h_errno<<endl;
 		exit(1);
@@ -274,6 +274,7 @@ vector<node> initialize(string file){
 		node.nodeid = nodeID;
 		node.ctrlPort = ctrlPort;
 		node.dataPort = dataPort;
+		node.hostName = hostName;
 		nodeList.push_back(node);
 	}
 	inFile.close();
