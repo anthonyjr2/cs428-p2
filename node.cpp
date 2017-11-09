@@ -13,6 +13,7 @@
 #include <thread>
 #include <chrono>
 #include <mutex>
+#include <climits>
 
 #define PACKET_SIZE 1024
 #define DATA_MESSAGE 2
@@ -352,15 +353,15 @@ void receiveDistanceVector(){
 		else if(p.type == DELETE_LINK)
 		{
 			routingLock.lock(); 	
-			// Removes the element from map with given key.
-			int result = routingTable.erase(p.destNodeID);
-			if(result!=1)
+			if(routingTable.find(p.destNodeID) == routingTable.end())
 			{
 				cout<<"Node "<<unsigned(nodeID)<<" does not have node "<<unsigned(p.destNodeID)<<" in its routing table to delete"<<endl;
 			}
 			else
 			{
 				//link removed
+				routingTable[p.destNodeID].distance = INT_MAX;
+				
 				for(int i = 0; i < neighbors.size(); i++)
 				{
 					if(p.destNodeID == neighbors[i])
@@ -410,11 +411,11 @@ void receiveDistanceVector(){
 			routingLock.unlock();
 			
 			//print out our updated routing table
-			/*for(auto it = routingTable.cbegin(); it != routingTable.cend(); ++it)
+			for(auto it = routingTable.cbegin(); it != routingTable.cend(); ++it)
 			{
 				std::cout << it->first << " " << it->second.intermediateNode << " " << it->second.distance << "\n";
 			}
-			cout<<endl;*/
+			cout<<endl;
 		}
 		
 	}
@@ -432,7 +433,8 @@ void updateRoutingTable(int destNodeID, int sourceNodeID, int senderPort, map<in
 			//there is a new node to put into our map
 			routeStruct case1RouteStruct;
 			case1RouteStruct.distance = iter->second.distance+1;
-			case1RouteStruct.intermediateNode = iter->second.intermediateNode;
+			//case1RouteStruct.intermediateNode = iter->second.intermediateNode;
+			case1RouteStruct.intermediateNode = sourceNodeID;
 			routingTable.insert(pair<int,routeStruct>(iter->first,case1RouteStruct));
 			//neighbors.push_back(destNodeID);
 		}
@@ -441,9 +443,10 @@ void updateRoutingTable(int destNodeID, int sourceNodeID, int senderPort, map<in
 	for(iter = recvdRoutingTable.begin(); iter != recvdRoutingTable.end();iter++){
 		it = routingTable.find(iter->first);
 		if (it != routingTable.end()){
-			if(it->second.distance > iter->second.distance+1){
+			if((it->second.distance > iter->second.distance+1) || (it->second.distance == -1)){
 				it->second.distance = iter->second.distance+1;
-				it->second.intermediateNode = iter->second.intermediateNode;
+				it->second.intermediateNode = sourceNodeID;
+				//it->second.intermediateNode = iter->second.intermediateNode;
 			}
 		}
 	}
@@ -457,7 +460,6 @@ void updateRoutingTable(int destNodeID, int sourceNodeID, int senderPort, map<in
 			}
 		}
 	}
-		
 }
 
 void receiveDataPacket()
