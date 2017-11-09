@@ -168,8 +168,10 @@ int createLink(int node1, int node2,vector<node>nodeList){
 	struct in_addr **addr_list;
 	//step 1 create control packet
 	controlPacketHeader newControlHeader, newControlHeader2;
-	node sendingNode1 = NULL;
-	node sendingNode2 = NULL;
+	node sendingNode1;
+	node sendingNode2;
+	sendingNode1.nodeid = -1;
+	sendingNode2.nodeid = -1;
 	//step 2 find the info for the sender packet
 	for(int i = 0; i < nodeList.size();i++){
 		if(nodeList[i].nodeid == node1){
@@ -198,13 +200,13 @@ int createLink(int node1, int node2,vector<node>nodeList){
 			break;
 		}
 	}
-	if(sendingNode1 == NULL){
+	if(sendingNode1.nodeid == -1){
 		cerr<<node1 <<" is not a valid node in this network configuration" <<endl;
 		cerr<<h_errno<<endl;
 		exit(1);
 	}
 
-	if(sendingNode2 == NULL){
+	if(sendingNode2.nodeid == -1){
 		cerr<<node2 <<" is not a valid node in this network configuration" <<endl;
 		cerr<<h_errno<<endl;
 		exit(1);
@@ -262,8 +264,10 @@ int removeLink(int node1, int node2,vector<node>nodeList){
 	struct in_addr **addr_list;
 	//step 1 create control packet
 	controlPacketHeader newControlHeader, newControlHeader2;
-	node sendingNode1 = NULL; 
-	node sendingNode2 = NULL;
+	node sendingNode1;
+	node sendingNode2;
+	sendingNode1.nodeid = -1;
+	sendingNode2.nodeid = -1;
 	//step 2 find the info for the sender packet
 	for(int i = 0; i < nodeList.size();i++){
 		if(nodeList[i].nodeid == node1){
@@ -292,13 +296,13 @@ int removeLink(int node1, int node2,vector<node>nodeList){
 			break;
 		}
 	}
-	if(sendingNode1 == NULL){
+	if(sendingNode1.nodeid == -1){
 		cerr<<node1 <<" is not a valid node in this network configuration" <<endl;
 		cerr<<h_errno<<endl;
 		exit(1);
 	}
 
-	if(sendingNode2 == NULL){
+	if(sendingNode2.nodeid == -1){
 		cerr<<node2 <<" is not a valid node in this network configuration" <<endl;
 		cerr<<h_errno<<endl;
 		exit(1);

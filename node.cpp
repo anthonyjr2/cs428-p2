@@ -361,11 +361,6 @@ void receiveDistanceVector(){
 			else
 			{
 				//link removed
-				cout<<"New routing table for node "<<nodeID<<" after remove:"<<endl;
-				for(auto it = routingTable.cbegin(); it != routingTable.cend(); ++it)
-				{
-					std::cout << it->first << " " << it->second.intermediateNode << " " << it->second.distance << "\n";
-				}
 				for(int i = 0; i < neighbors.size(); i++)
 				{
 					if(p.destNodeID == neighbors[i])
@@ -379,6 +374,11 @@ void receiveDistanceVector(){
 					if(it->second.intermediateNode == p.destNodeID){
 						routingTable.erase(it);
 					}
+				}
+				cout<<"New routing table for node "<<nodeID<<" after remove:"<<endl;
+				for(auto it = routingTable.cbegin(); it != routingTable.cend(); ++it)
+				{
+					std::cout << it->first << " " << it->second.intermediateNode << " " << it->second.distance << "\n";
 				}
 			}
 			routingLock.unlock();
@@ -413,7 +413,8 @@ void receiveDistanceVector(){
 			/*for(auto it = routingTable.cbegin(); it != routingTable.cend(); ++it)
 			{
 				std::cout << it->first << " " << it->second.intermediateNode << " " << it->second.distance << "\n";
-			}*/
+			}
+			cout<<endl;*/
 		}
 		
 	}
@@ -447,7 +448,7 @@ void updateRoutingTable(int destNodeID, int sourceNodeID, int senderPort, map<in
 		}
 	}
 	//case 3: distance vector coming in on same port so we have to update
-	if(senderPort == ctrlPort){
+	/*if(senderPort == ctrlPort){
 		for(iter = recvdRoutingTable.begin(); iter != recvdRoutingTable.end();iter++){
 			it = routingTable.find(iter->first);
 			if (it != routingTable.end()){
@@ -455,9 +456,9 @@ void updateRoutingTable(int destNodeID, int sourceNodeID, int senderPort, map<in
 					it->second.distance = iter->second.distance+1;
 					it->second.intermediateNode = iter->second.intermediateNode;
 				}
-			}		
+			}
 		}
-	}
+	}*/
 }
 
 void receiveDataPacket()
@@ -552,7 +553,7 @@ void buildDataPacket(int destNodeID)
 	routingLock.unlock();
 	if(res)
 	{
-		cout<<destNodeID<<" is not in this node's routing table (should not happen)"<<endl;
+		cout<<destNodeID<<" is not in this node's routing table"<<endl;
 	}
 	else
 	{
