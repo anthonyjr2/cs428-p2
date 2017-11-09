@@ -52,6 +52,7 @@ vector<int> neighbors;
 bool dataToSend = false;
 
 mutex sendFlagMutex;
+mutex routingLock;
 
 map<int,routeStruct> routingTable;
 map<int, nodeStruct> configTable;
@@ -240,6 +241,7 @@ void sendDistanceVector(int destNodeID){
 	
 	int i = 0;
 	map <int, routeStruct>::iterator iter;
+	routingLock.lock();
 	for(iter= routingTable.begin();iter != routingTable.end();iter++)
 	{
 		distanceToSend[i] = iter->second.distance;
@@ -253,6 +255,7 @@ void sendDistanceVector(int destNodeID){
 		destinationsToSend[i] = iter->first;
 		i++;
 	}
+	routingLock.unlock();
 	destinationsToSend[i] = -1;
 	
 	char packet[PACKET_SIZE];
@@ -329,7 +332,6 @@ void receiveDistanceVector(){
 		}
 		else
 		{
-	
 			char recvdDist[(PACKET_SIZE - sizeof(packetHeader))/2];
 			char recvdDestNode[(PACKET_SIZE - sizeof(packetHeader))/2];
 			memcpy(recvdDist, buf + sizeof(packetHeader), sizeof(recvdDist));
@@ -350,8 +352,10 @@ void receiveDistanceVector(){
 			//cout<<"["<<packetIDCtr<<"]"<<"Node "<<nodeID<< " received packet from node "<<unsigned(p.sourceNodeID)<<endl;
 	
 			//update algorithm
+			routingLock.lock();
 			updateRoutingTable(p.destNodeID,p.sourceNodeID,senderPort, recvdRoutingTable);
-		
+			routingLock.unlock();
+			
 			//print out our updated routing table
 			/*for(auto it = routingTable.cbegin(); it != routingTable.cend(); ++it)
 			{
@@ -476,7 +480,10 @@ void buildDataPacket(int destNodeID)
 {
 	//check our routing table for the destination
 	//forward it
-	if(routingTable.find(destNodeID) == routingTable.end())
+	routingLock.lock()
+	bool res = routingTable.find(destNodeID) == routingTable.end();
+	routingLock.unlock();
+	if(res)
 	{
 		cout<<destNodeID<<" is not in this node's routing table (should not happen)"<<endl;
 	}
