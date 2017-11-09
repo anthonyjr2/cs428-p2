@@ -340,8 +340,24 @@ void receiveDistanceVector(){
 			neighbors.push_back(p.destNodeID);
 			routingLock.unlock();
 		}
-		else
+		else if(p.type == DELETE_LINK)
 		{
+			routingLock.lock(); 	
+			// Removes the element from map with given key.
+			int result = wordMap.erase(p.destNodeID);
+			if(result!=1){
+				//This node already did not have the link we are trying to remove
+			}else{
+				//link removed
+				for(int i = 0; i < neighbors.size(); i++{
+					if(destNodeID == neighbors[i]){
+						neighbors.erase(neighbors.begin()+i);
+						break;
+					}
+				}
+			}
+			routingLock.unlock();
+		}else{
 			char recvdDist[(PACKET_SIZE - sizeof(packetHeader))/2];
 			char recvdDestNode[(PACKET_SIZE - sizeof(packetHeader))/2];
 			memcpy(recvdDist, buf + sizeof(packetHeader), sizeof(recvdDist));

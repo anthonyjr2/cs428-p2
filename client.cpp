@@ -255,6 +255,21 @@ int removeLink(int node1, int node2,vector<node>nodeList){
 		}
 	}
 
+	for(int i = 0; i < nodeList.size();i++){
+		if(nodeList[i].nodeid == node2){
+			//we have found our man
+			sendingNode2 = nodeList[i];
+			newControlHeader2.sourceNodeID = node2;
+			newControlHeader2.destNodeID = node1;
+			newControlHeader2.packetID = packetCounter;
+			newControlHeader2.type = ADD_LINK;
+			packetCounter++;
+			host = sendingNode2.hostName;
+			break;
+		}
+	}
+
+	//send to first node
 	he = gethostbyname(sendingNode1.hostName.c_str());
 	destAddr.sin_family = AF_INET;
 	destAddr.sin_port = htons(sendingNode1.ctrlPort); //dest ctrl port
@@ -264,6 +279,22 @@ int removeLink(int node1, int node2,vector<node>nodeList){
 	memcpy(packet, &newControlHeader, sizeof(newControlHeader));
 
 	int result = sendto(udpSocket, packet, PACKET_SIZE, 0, (struct sockaddr*)&destAddr, sizeof(destAddr));
+	if(result == -1){
+		cerr<<"Error sending packet"<<endl;
+		cout<<strerror(errno)<<endl;
+		exit(1);
+	}
+
+	//send to second node
+	he = gethostbyname(sendingNode2.hostName.c_str());
+	destAddr2.sin_family = AF_INET;
+	destAddr2.sin_port = htons(sendingNode2.ctrlPort); //dest ctrl port
+	memcpy(&destAddr2.sin_addr, he->h_addr, he->h_length); //dest ip	
+
+	char packet2[PACKET_SIZE];
+	memcpy(packet2, &newControlHeader2, sizeof(newControlHeader2));
+
+	result = sendto(udpSocket, packet2, PACKET_SIZE, 0, (struct sockaddr*)&destAddr2, sizeof(destAddr2));
 	if(result == -1){
 		cerr<<"Error sending packet"<<endl;
 		cout<<strerror(errno)<<endl;
