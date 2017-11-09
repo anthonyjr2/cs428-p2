@@ -168,7 +168,10 @@ int createLink(int node1, int node2,vector<node>nodeList){
 	struct in_addr **addr_list;
 	//step 1 create control packet
 	controlPacketHeader newControlHeader, newControlHeader2;
-	node sendingNode1, sendingNode2;
+	node sendingNode1;
+	node sendingNode2;
+	sendingNode1.nodeid = -1;
+	sendingNode2.nodeid = -1;
 	//step 2 find the info for the sender packet
 	for(int i = 0; i < nodeList.size();i++){
 		if(nodeList[i].nodeid == node1){
@@ -197,9 +200,25 @@ int createLink(int node1, int node2,vector<node>nodeList){
 			break;
 		}
 	}
+	if(sendingNode1.nodeid == -1){
+		cerr<<node1 <<" is not a valid node in this network configuration" <<endl;
+		cerr<<h_errno<<endl;
+		exit(1);
+	}
+
+	if(sendingNode2.nodeid == -1){
+		cerr<<node2 <<" is not a valid node in this network configuration" <<endl;
+		cerr<<h_errno<<endl;
+		exit(1);
+	}
 	
 	//send to first node
 	he = gethostbyname(sendingNode1.hostName.c_str());
+	if(he == NULL){
+		cerr<<"Error with gethostbyname in send"<<endl;
+		cerr<<h_errno<<endl;
+		exit(1);
+	}
 	destAddr.sin_family = AF_INET;
 	destAddr.sin_port = htons(sendingNode1.ctrlPort); //dest ctrl port
 	memcpy(&destAddr.sin_addr, he->h_addr, he->h_length); //dest ip	
@@ -215,6 +234,11 @@ int createLink(int node1, int node2,vector<node>nodeList){
 	}
 	//send to second node
 	he = gethostbyname(sendingNode2.hostName.c_str());
+	if(he == NULL){
+		cerr<<"Error with gethostbyname in send"<<endl;
+		cerr<<h_errno<<endl;
+		exit(1);
+	}
 	destAddr2.sin_family = AF_INET;
 	destAddr2.sin_port = htons(sendingNode2.ctrlPort); //dest ctrl port
 	memcpy(&destAddr2.sin_addr, he->h_addr, he->h_length); //dest ip	
@@ -240,7 +264,10 @@ int removeLink(int node1, int node2,vector<node>nodeList){
 	struct in_addr **addr_list;
 	//step 1 create control packet
 	controlPacketHeader newControlHeader, newControlHeader2;
-	node sendingNode1, sendingNode2;
+	node sendingNode1;
+	node sendingNode2;
+	sendingNode1.nodeid = -1;
+	sendingNode2.nodeid = -1;
 	//step 2 find the info for the sender packet
 	for(int i = 0; i < nodeList.size();i++){
 		if(nodeList[i].nodeid == node1){
@@ -269,9 +296,24 @@ int removeLink(int node1, int node2,vector<node>nodeList){
 			break;
 		}
 	}
+	if(sendingNode1.nodeid == -1){
+		cerr<<node1 <<" is not a valid node in this network configuration" <<endl;
+		cerr<<h_errno<<endl;
+		exit(1);
+	}
 
+	if(sendingNode2.nodeid == -1){
+		cerr<<node2 <<" is not a valid node in this network configuration" <<endl;
+		cerr<<h_errno<<endl;
+		exit(1);
+	}
 	//send to first node
 	he = gethostbyname(sendingNode1.hostName.c_str());
+	if(he == NULL){
+		cerr<<"Error with gethostbyname in send"<<endl;
+		cerr<<h_errno<<endl;
+		exit(1);
+	}
 	destAddr.sin_family = AF_INET;
 	destAddr.sin_port = htons(sendingNode1.ctrlPort); //dest ctrl port
 	memcpy(&destAddr.sin_addr, he->h_addr, he->h_length); //dest ip	
@@ -288,6 +330,11 @@ int removeLink(int node1, int node2,vector<node>nodeList){
 
 	//send to second node
 	he = gethostbyname(sendingNode2.hostName.c_str());
+	if(he == NULL){
+		cerr<<"Error with gethostbyname in send"<<endl;
+		cerr<<h_errno<<endl;
+		exit(1);
+	}
 	destAddr2.sin_family = AF_INET;
 	destAddr2.sin_port = htons(sendingNode2.ctrlPort); //dest ctrl port
 	memcpy(&destAddr2.sin_addr, he->h_addr, he->h_length); //dest ip	
