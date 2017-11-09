@@ -376,7 +376,9 @@ void receiveDistanceVector(){
 				}
 				for(auto it = routingTable.cbegin(); it != routingTable.cend(); ++it)
 				{
-					if(it -> )
+					if(it->second.intermediateNode == p.destNodeID){
+						routingTable.erase(it);
+					}
 				}
 			}
 			routingLock.unlock();
