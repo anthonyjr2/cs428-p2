@@ -320,6 +320,9 @@ void receiveDistanceVector(){
 			{
 				//we're done, print the payload
 				//display packet info
+				cout<<"Packet received, forwarding table: ";
+				cout<<nodeID<<" "<<unsigned(p.destNodeID);
+				cout<<endl<<"End of path."<<endl;
 			}
 			else
 			{
@@ -337,6 +340,11 @@ void receiveDistanceVector(){
 			s.intermediateNode = p.sourceNodeID;
 			s.distance = 1;
 			routingTable.insert(pair<int,routeStruct>(p.destNodeID,s));
+			cout<<"New routing table for node "<<unsigned(p.sourceNodeID)<<" after create:"<<endl;
+			for(auto it = routingTable.cbegin(); it != routingTable.cend(); ++it)
+			{
+				std::cout << it->first << " " << it->second.intermediateNode << " " << it->second.distance << "\n";
+			}
 			neighbors.push_back(p.destNodeID);
 			routingLock.unlock();
 		}
@@ -344,20 +352,32 @@ void receiveDistanceVector(){
 		{
 			routingLock.lock(); 	
 			// Removes the element from map with given key.
-			int result = wordMap.erase(p.destNodeID);
-			if(result!=1){
-				//This node already did not have the link we are trying to remove
-			}else{
+			int result = routingTable.erase(p.destNodeID);
+			if(result!=1)
+			{
+				cout<<"Node "<<unsigned(nodeID)<<" does not have node "<<unsigned(p.destNodeID)<<" in its routing table to delete"<<endl;
+			}
+			else
+			{
 				//link removed
-				for(int i = 0; i < neighbors.size(); i++{
-					if(destNodeID == neighbors[i]){
+				cout<<"New routing table for node "<<nodeID<<" after remove:"<<endl;
+				for(auto it = routingTable.cbegin(); it != routingTable.cend(); ++it)
+				{
+					std::cout << it->first << " " << it->second.intermediateNode << " " << it->second.distance << "\n";
+				}
+				for(int i = 0; i < neighbors.size(); i++)
+				{
+					if(p.destNodeID == neighbors[i])
+					{
 						neighbors.erase(neighbors.begin()+i);
 						break;
 					}
 				}
 			}
 			routingLock.unlock();
-		}else{
+		}
+		else
+		{
 			char recvdDist[(PACKET_SIZE - sizeof(packetHeader))/2];
 			char recvdDestNode[(PACKET_SIZE - sizeof(packetHeader))/2];
 			memcpy(recvdDist, buf + sizeof(packetHeader), sizeof(recvdDist));
@@ -383,10 +403,10 @@ void receiveDistanceVector(){
 			routingLock.unlock();
 			
 			//print out our updated routing table
-			for(auto it = routingTable.cbegin(); it != routingTable.cend(); ++it)
+			/*for(auto it = routingTable.cbegin(); it != routingTable.cend(); ++it)
 			{
 				std::cout << it->first << " " << it->second.intermediateNode << " " << it->second.distance << "\n";
-			}
+			}*/
 		}
 		
 	}
@@ -482,10 +502,12 @@ void receiveDataPacket()
 			payload[index] = nodeID;
 			
 			cout<<"Packet received, forwarding table: ";
+			cout<<unsigned(p.sourceNodeID)<<" ";
 			for(int i = 0; i < index; i++)
 			{
 				cout<<unsigned(payload[i])<<" ";
 			}
+			cout<<unsigned(p.destNodeID);
 			cout<<endl<<"End of path."<<endl;
 		}
 		else

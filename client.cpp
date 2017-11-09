@@ -85,6 +85,7 @@ int main(int argc, char *argv[]){
 	bind(udpSocket, (struct sockaddr*)&localAddr, sizeof localAddr);
 
 	while(1){
+		cout<<"Enter a command: ";
 		cin >> command >> node1 >> node2;
 		if(command == "generate-packet"){
 			if(generatePacket(node1,node2,nodeList) == -1){
@@ -96,7 +97,7 @@ int main(int argc, char *argv[]){
 				cout << "Error creating link" << endl;
 				exit(1);
 			}
-		}else if(command == "remove-Link"){
+		}else if(command == "remove-link"){
 			if(removeLink(node1,node2,nodeList)==-1){
 				cout << "Error removing link" << endl;
 				exit(1);
@@ -234,11 +235,11 @@ int removeLink(int node1, int node2,vector<node>nodeList){
 	//tell nodes to get info from the config table
 	//send one message to each node, telling it to look at the other's information 
 	string host;
-	struct sockaddr_in destAddr;
+	struct sockaddr_in destAddr, destAddr2;
 	struct hostent *he;
 	struct in_addr **addr_list;
 	//step 1 create control packet
-	controlPacketHeader newControlHeader;
+	controlPacketHeader newControlHeader, newControlHeader2;
 	node sendingNode1, sendingNode2;
 	//step 2 find the info for the sender packet
 	for(int i = 0; i < nodeList.size();i++){
@@ -262,7 +263,7 @@ int removeLink(int node1, int node2,vector<node>nodeList){
 			newControlHeader2.sourceNodeID = node2;
 			newControlHeader2.destNodeID = node1;
 			newControlHeader2.packetID = packetCounter;
-			newControlHeader2.type = ADD_LINK;
+			newControlHeader2.type = DELETE_LINK;
 			packetCounter++;
 			host = sendingNode2.hostName;
 			break;
