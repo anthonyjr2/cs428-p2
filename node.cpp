@@ -339,11 +339,12 @@ void receiveDistanceVector(){
 			routeStruct s;
 			s.intermediateNode = p.sourceNodeID;
 			s.distance = 1;
+			routingTable.erase(p.destNodeID);
 			routingTable.insert(pair<int,routeStruct>(p.destNodeID,s));
 			cout<<"New routing table for node "<<unsigned(p.sourceNodeID)<<" after create:"<<endl;
 			for(auto it = routingTable.cbegin(); it != routingTable.cend(); ++it)
 			{
-				std::cout << it->first << " " << it->second.intermediateNode << " " << it->second.distance << "\n";
+				cout<<it->first<< " " <<it->second.intermediateNode<<" "<< it->second.distance<<"\n";
 			}
 			neighbors.push_back(p.destNodeID);
 			routingLock.unlock();
@@ -372,6 +373,10 @@ void receiveDistanceVector(){
 						neighbors.erase(neighbors.begin()+i);
 						break;
 					}
+				}
+				for(auto it = routingTable.cbegin(); it != routingTable.cend(); ++it)
+				{
+					if(it -> )
 				}
 			}
 			routingLock.unlock();
