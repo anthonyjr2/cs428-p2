@@ -1,14 +1,18 @@
-#include <stdio.h>
-#include <stdlib.h>
+#include <iostream>
 #include <unistd.h>
+#include <cstring>
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <netdb.h>
 #include <fstream>
+#include <sstream>
 #include <string>
 #include <vector>
 #include <map>
+#include <thread>
+#include <chrono>
+#include <arpa/inet.h>
 
 #define PACKET_SIZE 1024
 #define DATA_MESSAGE 2
@@ -25,7 +29,7 @@ class node{
 		int nodeid, ctrlPort, dataPort;
 		string hostName;
 	private:
-}
+};
 
 typedef struct{
 	uint8_t sourceNodeID;
@@ -35,19 +39,24 @@ typedef struct{
 }controlPacketHeader;
 
 typedef struct{
-	int [2] pathToTravel;
+	int pathToTravel[2];
 }controlPacketPayload;
 
 typedef struct{
 	uint8_t sourceNodeID;
 	uint8_t destNodeID;
 	uint8_t packetID;
-	uint8_t TTL
+	uint8_t TTL;
 }dataPacketHeader;
 
 typedef struct{
-	int [100] pathTraveled;
+	int pathTraveled[100];
 }dataPacketPayload;
+
+int generatePacket(int sender,int reciever,vector<node>nodeList);
+int createLink(int node1, int node2,vector<node>nodeList);
+int removeLink(int node1, int node2,vector<node>nodeList);
+vector<node> initialize(string file);
 
 int main(int argc, char *argv[]){
 	
@@ -77,17 +86,17 @@ int main(int argc, char *argv[]){
 	while(1){
 		cin >> command >> node1 >> node2;
 		if(command == "generate-packet"){
-			if(generatePacket(node1,node2) == -1){
+			if(generatePacket(node1,node2,nodeList) == -1){
 				cout <<"Error sending packet"<<endl;
 				exit(1);
 			}
 		}else if(command == "create-link"){
-			if(createLink(node1,node2) == -1){
+			if(createLink(node1,node2,nodeList) == -1){
 				cout << "Error creating link" << endl;
 				exit(1);
 			}
 		}else if(command == "remove-Link"){
-			if(removeLink(node1,node2)==-1){
+			if(removeLink(node1,node2,nodeList)==-1){
 				cout << "Error removing link" << endl;
 				exit(1);
 			}	
@@ -96,7 +105,7 @@ int main(int argc, char *argv[]){
 
 }
 
-int generatePacket(int sender,int reciever,nodeList){
+int generatePacket(int sender,int reciever,vector<node>nodeList){
 	string host;
 	struct sockaddr_in destAddr;
 	struct hostent *he;
@@ -115,7 +124,6 @@ int generatePacket(int sender,int reciever,nodeList){
 			newControlHeader.packetID = packetCounter;
 			newControlHeader.type = DATA_MESSAGE;
 			packetCounter++;
-			newControlHeader.TTL = 15;
 			host = sendingNode.hostName;
 			break;
 		}
@@ -131,7 +139,7 @@ int generatePacket(int sender,int reciever,nodeList){
 	memcpy(&destAddr.sin_addr, he->h_addr, he->h_length); //dest ip	
 
 	char packet[PACKET_SIZE];
-	memcpy(packet, &header, sizeof(header));
+	memcpy(packet, &newControlHeader, sizeof(newControlHeader));
 
 	int result = sendto(udpSocket, packet, PACKET_SIZE, 0, (struct sockaddr*)&destAddr, sizeof(destAddr));
 	if(result == -1){
@@ -141,7 +149,7 @@ int generatePacket(int sender,int reciever,nodeList){
 	}
 }
 
-int createLink(int node1, int node2){
+int createLink(int node1, int node2,vector<node>nodeList){
 	//tell nodes to get info from the config table
 	//send one message to each node, telling it to look at the other's information 
 	string host;
@@ -161,8 +169,7 @@ int createLink(int node1, int node2){
 			newControlHeader.packetID = packetCounter;
 			newControlHeader.type = ADD_LINK;
 			packetCounter++;
-			newControlHeader.TTL = 15;
-			host = sendingNode.hostName;
+			host = sendingNode1.hostName;
 			break;
 		}
 	}
@@ -182,13 +189,13 @@ int createLink(int node1, int node2){
 		}
 	}*/
 
-	he = gethostbyname(sendingNode.hostName.c_str());
+	he = gethostbyname(sendingNode1.hostName.c_str());
 	destAddr.sin_family = AF_INET;
-	destAddr.sin_port = htons(sendingNode.ctrlPort); //dest ctrl port
+	destAddr.sin_port = htons(sendingNode1.ctrlPort); //dest ctrl port
 	memcpy(&destAddr.sin_addr, he->h_addr, he->h_length); //dest ip	
 
 	char packet[PACKET_SIZE];
-	memcpy(packet, &header, sizeof(header));
+	memcpy(packet, &newControlHeader, sizeof(newControlHeader));
 
 	int result = sendto(udpSocket, packet, PACKET_SIZE, 0, (struct sockaddr*)&destAddr, sizeof(destAddr));
 	if(result == -1){
@@ -198,7 +205,7 @@ int createLink(int node1, int node2){
 	}
 }
 
-int removeLink(int node1, int node2){
+int removeLink(int node1, int node2,vector<node>nodeList){
 	//tell nodes to get info from the config table
 	//send one message to each node, telling it to look at the other's information 
 	string host;
@@ -218,19 +225,18 @@ int removeLink(int node1, int node2){
 			newControlHeader.packetID = packetCounter;
 			newControlHeader.type = DELETE_LINK;
 			packetCounter++;
-			newControlHeader.TTL = 15;
-			host = sendingNode.hostName;
+			host = sendingNode1.hostName;
 			break;
 		}
 	}
 
-	he = gethostbyname(sendingNode.hostName.c_str());
+	he = gethostbyname(sendingNode1.hostName.c_str());
 	destAddr.sin_family = AF_INET;
-	destAddr.sin_port = htons(sendingNode.ctrlPort); //dest ctrl port
+	destAddr.sin_port = htons(sendingNode1.ctrlPort); //dest ctrl port
 	memcpy(&destAddr.sin_addr, he->h_addr, he->h_length); //dest ip	
 
 	char packet[PACKET_SIZE];
-	memcpy(packet, &header, sizeof(header));
+	memcpy(packet, &newControlHeader, sizeof(newControlHeader));
 
 	int result = sendto(udpSocket, packet, PACKET_SIZE, 0, (struct sockaddr*)&destAddr, sizeof(destAddr));
 	if(result == -1){
@@ -240,13 +246,15 @@ int removeLink(int node1, int node2){
 	}
 }
 
-int initialize(string file){
+vector<node> initialize(string file){
+	int nodeID, ctrlPort, dataPort, packetIDCtr, udpSocket;
+	string hostName;
 	vector<node>nodeList;
 	ifstream inFile;
 	inFile.open(file);
 	if(!inFile){
-		cerr<<"Unable to open file "<<argv[1]<<endl;
-		return -1;
+		cerr<<"Unable to open file "<<file<<endl;
+		//return -1;
 	}
 	string line;
 	while(getline(inFile, line)){
