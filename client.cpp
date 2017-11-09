@@ -79,7 +79,8 @@ int main(int argc, char *argv[]){
 	
 	localAddr.sin_family = AF_INET;
 	localAddr.sin_port = htons(0);
-	inet_pton(AF_INET, INADDR_ANY, &localAddr.sin_addr);
+	//inet_pton(AF_INET, INADDR_ANY, &localAddr.sin_addr);
+	localAddr.sin_addr.s_addr = INADDR_ANY;
 
 	bind(udpSocket, (struct sockaddr*)&localAddr, sizeof localAddr);
 
@@ -100,6 +101,8 @@ int main(int argc, char *argv[]){
 				cout << "Error removing link" << endl;
 				exit(1);
 			}	
+		}else{
+			cout<<"Invalid command"<<endl;
 		}
 	}
 
@@ -134,6 +137,12 @@ int generatePacket(int sender,int reciever,vector<node>nodeList){
 	//step 3 send that shit
 
 	he = gethostbyname(sendingNode.hostName.c_str());
+	if(he == NULL)q
+	{
+		cerr<<"Error with gethostbyname in send"<<endl;
+		cerr<<h_errno<<endl;
+		exit(1);
+	}
 	destAddr.sin_family = AF_INET;
 	destAddr.sin_port = htons(sendingNode.ctrlPort); //dest ctrl port
 	memcpy(&destAddr.sin_addr, he->h_addr, he->h_length); //dest ip	

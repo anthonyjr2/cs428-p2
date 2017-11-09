@@ -45,7 +45,7 @@ typedef struct
 	string hostName;
 }nodeStruct;
 
-int nodeID, ctrlPort, dataPort, packetIDCtr, udpSocket, controlDestinationNode;
+int nodeID, ctrlPort, dataPort, packetIDCtr, controlSocket, dataSocket, controlDestinationNode;
 string hostName;
 vector<int> neighbors;
 
@@ -117,8 +117,8 @@ int main(int argc, char *argv[])
 	dataPort = configTable[nodeID].dataPort; //set global variables to this node's info
 	hostName = configTable[nodeID].hostName;
 	
-	udpSocket = socket(AF_INET, SOCK_DGRAM, 0); //open a UDP socket for all connections
-	if(udpSocket == -1)
+	controlSocket = socket(AF_INET, SOCK_DGRAM, 0); //open a UDP socket for all connections
+	if(controlSocket == -1)
 	{
 		cerr<<strerror(errno)<<endl;
 		exit(1);
@@ -140,10 +140,32 @@ int main(int argc, char *argv[])
 	memcpy(&localAddr.sin_addr, he->h_addr, he->h_length);
 	
 	//bind the port to the socket we opened earlier
-	int result = bind(udpSocket, (struct sockaddr*)&localAddr, sizeof(localAddr));
+	int result = bind(controlSocket, (struct sockaddr*)&localAddr, sizeof(localAddr));
 	if(result < 0)
 	{
 		cerr<<"Bind on local socket for sending distance vector failed"<<endl;
+		cerr<<strerror(errno)<<endl;
+		exit(1);
+	}
+	
+	dataSocket = socket(AF_INET, SOCK_DGRAM, 0);
+	if(dataSocket == -1)
+	{
+		cerr<<strerror(errno)<<endl;
+		exit(1);
+	}
+	
+	struct sockaddr_in localAddrData;
+	memset((char*)&localAddrData, 0, sizeof(localAddrData));
+	localAddrData.sin_family = AF_INET;
+	localAddrData.sin_port = htons(dataPort);
+	memcpy(&localAddrData.sin_addr, he->h_addr, he->h_length);
+	
+	//bind the port to the socket we opened earlier
+	result = bind(dataSocket, (struct sockaddr*)&localAddrData, sizeof(localAddrData));
+	if(result < 0)
+	{
+		cerr<<"Bind on local socket for sending data packets failed"<<endl;
 		cerr<<strerror(errno)<<endl;
 		exit(1);
 	}
@@ -238,7 +260,7 @@ void sendDistanceVector(int destNodeID){
 	memcpy(packet + sizeof(header), &distanceToSend, sizeof(distanceToSend));
 	memcpy(packet + sizeof(header) + sizeof(distanceToSend), &destinationsToSend, sizeof(destinationsToSend));
 
-	int result = sendto(udpSocket, packet, PACKET_SIZE, 0, (struct sockaddr*)&destAddr, sizeof(destAddr));
+	int result = sendto(controlSocket, packet, PACKET_SIZE, 0, (struct sockaddr*)&destAddr, sizeof(destAddr));
 	if(result == -1)
 	{
 		cerr<<"Error sending packet"<<endl;
@@ -255,11 +277,11 @@ void receiveDistanceVector(){
 	
 	fd_set readfds; //fd_set for select
 	FD_ZERO(&readfds);//reset the fd set each time so it works
-	FD_SET(udpSocket, &readfds);
+	FD_SET(controlSocket, &readfds);
 	
 	tv.tv_sec = 3;//timeout is 3 seconds
 	tv.tv_usec = 0;
-	int rv = select(udpSocket + 1, &readfds, NULL, NULL, &tv);//blocking and waiting for input from udp
+	int rv = select(controlSocket + 1, &readfds, NULL, NULL, &tv);//blocking and waiting for input from udp
 	if(rv == -1)
 	{
 		cerr<<"Select error"<<endl;//error
@@ -268,11 +290,11 @@ void receiveDistanceVector(){
 	{
 		//cout<<"[ERROR]Timeout"<<endl;//timeout
 	}
-	else if(FD_ISSET(udpSocket, &readfds))//detected something from udpsocket
+	else if(FD_ISSET(controlSocket, &readfds))//detected something from controlSocket
 	{
 		char buf[PACKET_SIZE];
 		fromlen = sizeof(senderAddr);
-		int result = recvfrom(udpSocket, buf, PACKET_SIZE, 0, (struct sockaddr*)&senderAddr, &fromlen);
+		int result = recvfrom(controlSocket, buf, PACKET_SIZE, 0, (struct sockaddr*)&senderAddr, &fromlen);
 		if(result == -1)//result is how many bits the revieve got from the sender
 		{
 			cerr<<"Error recieving packet"<<endl;
@@ -389,11 +411,11 @@ void receiveDataPacket()
 
 	fd_set readfds; //fd_set for select
 	FD_ZERO(&readfds);//reset the fd set each time so it works
-	FD_SET(udpSocket, &readfds);
+	FD_SET(dataSocket, &readfds);
 
 	tv.tv_sec = 3;//timeout is 3 seconds
 	tv.tv_usec = 0;
-	int rv = select(udpSocket + 1, &readfds, NULL, NULL, &tv);//blocking and waiting
+	int rv = select(dataSocket + 1, &readfds, NULL, NULL, &tv);//blocking and waiting
 	if(rv == -1)
 	{
 		cerr<<"Select error"<<endl;//error
@@ -402,11 +424,11 @@ void receiveDataPacket()
 	{
 		//cout<<"[ERROR]Timeout"<<endl;//timeout
 	}
-	else if(FD_ISSET(udpSocket, &readfds))//detected something from udpsocket
+	else if(FD_ISSET(dataSocket, &readfds))//detected something from dataSocket
 	{
 		char buf[PACKET_SIZE];
 		fromlen = sizeof(senderAddr);
-		int result = recvfrom(udpSocket, buf, PACKET_SIZE, 0, (struct sockaddr*)&senderAddr, &fromlen);
+		int result = recvfrom(dataSocket, buf, PACKET_SIZE, 0, (struct sockaddr*)&senderAddr, &fromlen);
 		if(result == -1)//result is how many bits the revieve got from the sender
 		{
 			cerr<<"Error recieving packet"<<endl;
@@ -443,7 +465,7 @@ void receiveDataPacket()
 				p.TTL--;
 				memcpy(packet, &p, sizeof(packetHeader));
 				memcpy(packet + sizeof(packetHeader), &payload, sizeof(payload));
-				cout<<"[] Node "<<nodeID<<" forwarding packet from node "<<p.sourceNodeID<<" to node  "<<p.destNodeID<<endl;
+				cout<<"[] Node "<<nodeID<<" forwarding packet from node "<<unsigned(p.sourceNodeID)<<" to node  "<<unsigned(p.destNodeID)<<endl;
 				sendDataPacket(packet);
 			}
 		}
@@ -496,7 +518,7 @@ void sendDataPacket(char packet[PACKET_SIZE])
 	destAddr.sin_port = htons(configTable[p.destNodeID].dataPort); //dest ctrl port
 	memcpy(&destAddr.sin_addr, he->h_addr, he->h_length); //dest ip
 
-	int result = sendto(udpSocket, packet, PACKET_SIZE, 0, (struct sockaddr*)&destAddr, sizeof(destAddr));
+	int result = sendto(dataSocket, packet, PACKET_SIZE, 0, (struct sockaddr*)&destAddr, sizeof(destAddr));
 	if(result == -1)
 	{
 		cerr<<"Error sending data packet"<<endl;
