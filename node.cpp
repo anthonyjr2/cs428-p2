@@ -339,11 +339,12 @@ void receiveDistanceVector(){
 			routeStruct s;
 			s.intermediateNode = p.sourceNodeID;
 			s.distance = 1;
+			routingTable.erase(p.destNodeID);
 			routingTable.insert(pair<int,routeStruct>(p.destNodeID,s));
 			cout<<"New routing table for node "<<unsigned(p.sourceNodeID)<<" after create:"<<endl;
 			for(auto it = routingTable.cbegin(); it != routingTable.cend(); ++it)
 			{
-				std::cout << it->first << " " << it->second.intermediateNode << " " << it->second.distance << "\n";
+				cout<<it->first<<" "<<it->second.intermediateNode<<" "<< it->second.distance<<"\n";
 			}
 			neighbors.push_back(p.destNodeID);
 			routingLock.unlock();
@@ -359,12 +360,6 @@ void receiveDistanceVector(){
 			}
 			else
 			{
-				//link removed
-				cout<<"New routing table for node "<<nodeID<<" after remove:"<<endl;
-				for(auto it = routingTable.cbegin(); it != routingTable.cend(); ++it)
-				{
-					std::cout << it->first << " " << it->second.intermediateNode << " " << it->second.distance << "\n";
-				}
 				for(int i = 0; i < neighbors.size(); i++)
 				{
 					if(p.destNodeID == neighbors[i])
@@ -372,6 +367,19 @@ void receiveDistanceVector(){
 						neighbors.erase(neighbors.begin()+i);
 						break;
 					}
+				} 				
+				for(auto it = routingTable.begin(); it != routingTable.end(); ++it)
+  				{
+	  				if(it->second.intermediateNode == p.destNodeID)
+	  				{
+	 					routingTable.erase(it);
+	 				}
+  				}
+  				//link removed
+				cout<<"New routing table for node "<<nodeID<<" after remove:"<<endl;
+				for(auto it = routingTable.cbegin(); it != routingTable.cend(); ++it)
+				{
+					std::cout << it->first << " " << it->second.intermediateNode << " " << it->second.distance << "\n";
 				}
 			}
 			routingLock.unlock();
@@ -406,7 +414,8 @@ void receiveDistanceVector(){
 			/*for(auto it = routingTable.cbegin(); it != routingTable.cend(); ++it)
 			{
 				std::cout << it->first << " " << it->second.intermediateNode << " " << it->second.distance << "\n";
-			}*/
+			}
+			cout<<endl;*/
 		}
 		
 	}
@@ -416,6 +425,7 @@ void updateRoutingTable(int destNodeID, int sourceNodeID, int senderPort, map<in
 {
 	//case 1: node in recvd routing table is not in this nodes routing table
 	map<int,routeStruct>::iterator it;
+	map<int,routeStruct>::iterator recievedTableIter;
 	map <int, routeStruct>::iterator iter; //received table iterator
 	for(iter= recvdRoutingTable.begin();iter != recvdRoutingTable.end();iter++){
 		it = routingTable.find(iter->first);
@@ -439,7 +449,7 @@ void updateRoutingTable(int destNodeID, int sourceNodeID, int senderPort, map<in
 			}
 		}
 	}
-	//case 3: distance vector coming in on same port so we have to update
+	/*//case 3: distance vector coming in on same port so we have to update
 	if(senderPort == ctrlPort){
 		for(iter = recvdRoutingTable.begin(); iter != recvdRoutingTable.end();iter++){
 			it = routingTable.find(iter->first);
@@ -449,6 +459,23 @@ void updateRoutingTable(int destNodeID, int sourceNodeID, int senderPort, map<in
 					it->second.intermediateNode = iter->second.intermediateNode;
 				}
 			}		
+		}
+	}*/
+	//THIS IS CAUSING DISTANCES TO BE ALL 1
+	//case 3: force update changes beyond our intermediate node
+	for(auto ourIter = routingTable.begin(); ourIter != routingTable.end();ourIter++){
+		if(ourIter->second.intermediateNode == sourceNodeID){
+			//recievedTableIter = recvdRoutingTable.find(ourIter->first);
+			//if(it!= recvdRoutingTable.end()){
+			//	ourIter->second.distance = it->second.distance++;
+			//}
+			//cout << "Force updating " << nodeID <<"s destination: " << ourIter->first <<" that has a distance of "<< ourIter->second.distance << " with data from node " <<sourceNodeID << " that has distance " << recvdRoutingTable[ourIter->first].distance << endl;
+			int incomingDistance = recvdRoutingTable[ourIter->first].distance;
+			//cout << "Incoming distance before increment is: " << incomingDistance << endl;
+			ourIter->second.distance = ++incomingDistance;
+			//ourIter->second.distance = recvdRoutingTable[ourIter->first].distance++;
+			//cout <<"The new distance for destination " <<ourIter->first << " is " << ourIter->second.distance<<endl;
+			
 		}
 	}
 }
@@ -545,7 +572,7 @@ void buildDataPacket(int destNodeID)
 	routingLock.unlock();
 	if(res)
 	{
-		cout<<destNodeID<<" is not in this node's routing table (should not happen)"<<endl;
+		cout<<destNodeID<<" is not in this node's routing table"<<endl;
 	}
 	else
 	{
