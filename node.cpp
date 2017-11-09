@@ -330,6 +330,16 @@ void receiveDistanceVector(){
 				sendFlagMutex.unlock();
 			}
 		}
+		else if(p.type == ADD_LINK)
+		{
+			routingLock.lock();
+			routeStruct s;
+			s.intermediateNode = p.sourceNodeID;
+			s.distance = 1;
+			routingTable.insert(pair<int,routeStruct>(p.destNodeID,s));
+			neighbors.push_back(p.destNodeID);
+			routingLock.unlock();
+		}
 		else
 		{
 			char recvdDist[(PACKET_SIZE - sizeof(packetHeader))/2];
@@ -357,10 +367,10 @@ void receiveDistanceVector(){
 			routingLock.unlock();
 			
 			//print out our updated routing table
-			/*for(auto it = routingTable.cbegin(); it != routingTable.cend(); ++it)
+			for(auto it = routingTable.cbegin(); it != routingTable.cend(); ++it)
 			{
 				std::cout << it->first << " " << it->second.intermediateNode << " " << it->second.distance << "\n";
-			}*/
+			}
 		}
 		
 	}
@@ -380,6 +390,7 @@ void updateRoutingTable(int destNodeID, int sourceNodeID, int senderPort, map<in
 			case1RouteStruct.distance = iter->second.distance+1;
 			case1RouteStruct.intermediateNode = iter->second.intermediateNode;
 			routingTable.insert(pair<int,routeStruct>(iter->first,case1RouteStruct));
+			//neighbors.push_back(destNodeID);
 		}
 	}
 	//case 2: there is more optimal route than we have stored in this routing table

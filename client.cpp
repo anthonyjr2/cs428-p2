@@ -162,11 +162,11 @@ int createLink(int node1, int node2,vector<node>nodeList){
 	//tell nodes to get info from the config table
 	//send one message to each node, telling it to look at the other's information 
 	string host;
-	struct sockaddr_in destAddr;
+	struct sockaddr_in destAddr, destAddr2;
 	struct hostent *he;
 	struct in_addr **addr_list;
 	//step 1 create control packet
-	controlPacketHeader newControlHeader;
+	controlPacketHeader newControlHeader, newControlHeader2;
 	node sendingNode1, sendingNode2;
 	//step 2 find the info for the sender packet
 	for(int i = 0; i < nodeList.size();i++){
@@ -183,21 +183,21 @@ int createLink(int node1, int node2,vector<node>nodeList){
 		}
 	}
 
-	/*for(int i = 0; i < nodeList.size();i++){
+	for(int i = 0; i < nodeList.size();i++){
 		if(nodeList[i].nodeid == node2){
 			//we have found our man
 			sendingNode2 = nodeList[i];
-			newControlHeader.sourceNodeID = sender;
-			newControlHeader.destNodeID = reciever;
-			newControlHeader.packetID = packetCounter;
-			newControlHeader.type = ADD_LINK;
+			newControlHeader2.sourceNodeID = node2;
+			newControlHeader2.destNodeID = node1;
+			newControlHeader2.packetID = packetCounter;
+			newControlHeader2.type = ADD_LINK;
 			packetCounter++;
-			newControlHeader.TTL = 15;
-			host = sendingNode.hostName;
+			host = sendingNode2.hostName;
 			break;
 		}
-	}*/
-
+	}
+	
+	//send to first node
 	he = gethostbyname(sendingNode1.hostName.c_str());
 	destAddr.sin_family = AF_INET;
 	destAddr.sin_port = htons(sendingNode1.ctrlPort); //dest ctrl port
@@ -212,6 +212,22 @@ int createLink(int node1, int node2,vector<node>nodeList){
 		cout<<strerror(errno)<<endl;
 		exit(1);
 	}
+	//send to second node
+	he = gethostbyname(sendingNode2.hostName.c_str());
+	destAddr2.sin_family = AF_INET;
+	destAddr2.sin_port = htons(sendingNode2.ctrlPort); //dest ctrl port
+	memcpy(&destAddr2.sin_addr, he->h_addr, he->h_length); //dest ip	
+
+	char packet2[PACKET_SIZE];
+	memcpy(packet2, &newControlHeader2, sizeof(newControlHeader2));
+
+	result = sendto(udpSocket, packet2, PACKET_SIZE, 0, (struct sockaddr*)&destAddr2, sizeof(destAddr2));
+	if(result == -1){
+		cerr<<"Error sending packet"<<endl;
+		cout<<strerror(errno)<<endl;
+		exit(1);
+	}
+	
 }
 
 int removeLink(int node1, int node2,vector<node>nodeList){
