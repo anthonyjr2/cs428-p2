@@ -12,8 +12,12 @@
 #include <map>
 #include <thread>
 #include <chrono>
+#include <mutex>
 
 #define PACKET_SIZE 1024
+#define DATA_MESSAGE 2
+#define ADD_LINK 3
+#define DELETE_LINK 4
 
 using namespace std;
 
@@ -31,6 +35,7 @@ typedef struct{
 	uint8_t destNodeID;
 	uint8_t packetID;
 	uint8_t type;
+	uint8_t TTL;
 }packetHeader;
 
 typedef struct
@@ -40,22 +45,13 @@ typedef struct
 	string hostName;
 }nodeStruct;
 
-typedef struct{
-	uint8_t sourceNodeID;
-	uint8_t destNodeID;
-	uint8_t packetID;
-	uint8_t TTL;
-}controlPacketHeader;
-
-typedef struct{
-	int pathToTravel[2];
-}controlPacketPayload;
-
-int nodeID, ctrlPort, dataPort, packetIDCtr, udpSocket;
+int nodeID, ctrlPort, dataPort, packetIDCtr, udpSocket, controlDestinationNode;
 string hostName;
 vector<int> neighbors;
 
 bool dataToSend = false;
+
+mutex sendFlagMutex;
 
 map<int,routeStruct> routingTable;
 map<int, nodeStruct> configTable;
@@ -63,10 +59,11 @@ map<int, nodeStruct> configTable;
 void sendDistanceVector(int destNodeID);
 void receiveDistanceVector();
 void updateRoutingTable(int destNodeID, int sourceNodeID, int senderPort, map<int, routeStruct> recvdRoutingTable);
-void sendDataPacket(int destNodeID);
+void sendDataPacket(char packet[PACKET_SIZE]);
 void receiveDataPacket();
 void startControlThread();
 void startDataThread();
+void buildDataPacket(int destNodeID);
 
 int main(int argc, char *argv[])
 {	
@@ -136,7 +133,6 @@ int main(int argc, char *argv[])
 		exit(1);
 	}
 	
-	
 	struct sockaddr_in localAddr;
 	memset((char*)&localAddr, 0, sizeof(localAddr));
 	localAddr.sin_family = AF_INET;
@@ -152,8 +148,8 @@ int main(int argc, char *argv[])
 		exit(1);
 	}
 	
-	thread cntrlThread(startControlThread());
-	thread dataThread(startDataThread());
+	thread cntrlThread(startControlThread);
+	thread dataThread(startDataThread);
 	
 	cntrlThread.join();
 	dataThread.join();
@@ -167,10 +163,10 @@ void startControlThread()
 	{
 		auto diff = chrono::duration_cast<ms>(Clock::now() - start);
 		if(diff.count() > 2000) //send every 2s
-		{	
+		{
 			for(int i = 0; i < neighbors.size(); i++)
 			{
-				cout<<"["<<packetIDCtr<<"]"<<"Sending packet from node "<<thisNodeID<<" to node "<<neighbors.at(i)<<endl;
+				cout<<"["<<packetIDCtr<<"]"<<"Sending packet from node "<<nodeID<<" to node "<<neighbors.at(i)<<endl;
 				sendDistanceVector(neighbors.at(i));
 			}
 			start = Clock::now();
@@ -183,12 +179,14 @@ void startDataThread()
 {
 	while(1)
 	{
-	//lock around outside of if
-		if(dataToSend)
+		sendFlagMutex.lock();
+		if(dataToSend) //check global flag to see if we have any data to send
 		{
-			sendDataPacket();
+			dataToSend = false;
+			buildDataPacket(controlDestinationNode); //need to also check for send when we receive a data packet that needs to be forwarded
 		}
-		receiveDataPacket(); //receive distance vector if any are pending
+		sendFlagMutex.unlock();
+		receiveDataPacket(); //receive data packet if any are pending
 	}
 }
 
@@ -247,7 +245,7 @@ void sendDistanceVector(int destNodeID){
 		cout<<strerror(errno)<<endl;
 		exit(1);
 	}
-	packetIDCtr++;
+	//packetIDCtr++;
 }
 void receiveDistanceVector(){
 	struct hostent *he;
@@ -290,39 +288,53 @@ void receiveDistanceVector(){
 		memcpy(recvdPacketHeader, buf, sizeof(packetHeader));
 		packetHeader p;
 		memcpy(&p, recvdPacketHeader, sizeof(packetHeader));
-	
-		char recvdDist[(PACKET_SIZE - sizeof(packetHeader))/2];
-		char recvdDestNode[(PACKET_SIZE - sizeof(packetHeader))/2];
-		memcpy(recvdDist, buf + sizeof(packetHeader), sizeof(recvdDist));
-		memcpy(recvdDestNode, buf + sizeof(packetHeader) + sizeof(recvdDist), sizeof(recvdDestNode));
-		map<int,routeStruct> recvdRoutingTable;
-
-		//reconstructing the map
-		int i = 0;
-		while(recvdDestNode[i] != -1)
+		
+		if(p.type == DATA_MESSAGE)
 		{
-			routeStruct recvdStruct;
-			recvdStruct.distance = recvdDist[i];
-			recvdStruct.intermediateNode = unsigned(p.sourceNodeID);
-			recvdRoutingTable.insert(pair<int,routeStruct>(recvdDestNode[i],recvdStruct));
-			i++;
+			if(nodeID == p.destNodeID)
+			{
+				//we're done, print the payload
+				//display packet info
+			}
+			else
+			{
+				controlDestinationNode = p.destNodeID;
+				//set flag to send stuff out now
+				sendFlagMutex.lock()
+				dataToSend = true;
+				sendFlagMutex.unlock()
+			}
 		}
-		
-		cout<<"["<<packetIDCtr<<"]"<<"Node "<<nodeID<< " received packet from node "<<unsigned(p.sourceNodeID)<<endl;
-
-		//print out the routing table we received
-		/*for(auto it = recvdRoutingTable.cbegin(); it != recvdRoutingTable.cend(); ++it)
+		else
 		{
-			std::cout << it->first << " " << it->second.intermediateNode << " " << it->second.distance << "\n";
-		}*/
 	
-		//update algorithm
-		updateRoutingTable(p.destNodeID,p.sourceNodeID,senderPort, recvdRoutingTable);
+			char recvdDist[(PACKET_SIZE - sizeof(packetHeader))/2];
+			char recvdDestNode[(PACKET_SIZE - sizeof(packetHeader))/2];
+			memcpy(recvdDist, buf + sizeof(packetHeader), sizeof(recvdDist));
+			memcpy(recvdDestNode, buf + sizeof(packetHeader) + sizeof(recvdDist), sizeof(recvdDestNode));
+			map<int,routeStruct> recvdRoutingTable;
+
+			//reconstructing the map
+			int i = 0;
+			while(recvdDestNode[i] != -1)
+			{
+				routeStruct recvdStruct;
+				recvdStruct.distance = recvdDist[i];
+				recvdStruct.intermediateNode = unsigned(p.sourceNodeID);
+				recvdRoutingTable.insert(pair<int,routeStruct>(recvdDestNode[i],recvdStruct));
+				i++;
+			}
 		
-		//print out our updated routing table
-		for(auto it = routingTable.cbegin(); it != routingTable.cend(); ++it)
-		{
-			std::cout << it->first << " " << it->second.intermediateNode << " " << it->second.distance << "\n";
+			cout<<"["<<packetIDCtr<<"]"<<"Node "<<nodeID<< " received packet from node "<<unsigned(p.sourceNodeID)<<endl;
+	
+			//update algorithm
+			updateRoutingTable(p.destNodeID,p.sourceNodeID,senderPort, recvdRoutingTable);
+		
+			//print out our updated routing table
+			/*for(auto it = routingTable.cbegin(); it != routingTable.cend(); ++it)
+			{
+				std::cout << it->first << " " << it->second.intermediateNode << " " << it->second.distance << "\n";
+			}*/
 		}
 		
 	}
@@ -372,12 +384,73 @@ void receiveDataPacket()
 {
 	cout<<"In receiving data packet..."<<endl;
 	sleep(2);
+	//check if we are the destination
+	if(p.destNodeID == nodeID)
+	{
+		//we're done
+	}
+	else
+	{
+		//add ourselves into the payload and forward
+	}
+	
+	
 }
 
-void sendDataPacket(int destNodeID)
+void buildDataPacket(int destNodeID)
 {
-	cout<<"In sending data packet..."<<endl;
-	sleep(2);
+	struct sockaddr_in destAddr;
+	struct hostent *he;
+	
+	//check our routing table for the destination
+	//forward it
+	if(routingTable[destNodeID])
+	{
+		packetHeader header;
+		header.sourceNodeID = nodeID;
+		header.destNodeID = destNodeID;
+		header.packetID = packetIDCtr++;
+		header.TTL = 15;
+		
+		char payload[PACKET_SIZE - sizeof(header)];
+
+		char packet[PACKET_SIZE];
+		memcpy(packet, &header, sizeof(header));
+		memcpy(packet + sizeof(header), &payload, sizeof(payload));
+		sendDataPacket(packet);
+		
+	}
+	else
+	{
+		//die
+	}
+	
+}
+
+void sendDataPacket(char packet[PACKET_SIZE])
+{
+	packetHeader p;
+	memcpy(&p, packet, sizeof(packetHeader));
+
+	he = gethostbyname(configTable[p.destNodeID].hostName.c_str());
+	if(he == NULL)
+	{
+		cerr<<"Error with gethostbyname in send"<<endl;
+		cerr<<h_errno<<endl;
+		exit(1);
+	}
+	
+	destAddr.sin_family = AF_INET;
+	destAddr.sin_port = htons(configTable[p.destNodeID].dataPort); //dest ctrl port
+	memcpy(&destAddr.sin_addr, he->h_addr, he->h_length); //dest ip
+
+	int result = sendto(udpSocket, packet, PACKET_SIZE, 0, (struct sockaddr*)&destAddr, sizeof(destAddr));
+	if(result == -1)
+	{
+		cerr<<"Error sending data packet"<<endl;
+		cout<<strerror(errno)<<endl;
+		exit(1);
+	}
 }
 
 
