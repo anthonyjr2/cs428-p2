@@ -447,18 +447,17 @@ void updateRoutingTable(int destNodeID, int sourceNodeID, int senderPort, map<in
 			}
 		}
 	}
-	//case 3: distance vector coming in on same port so we have to update
-	/*if(senderPort == ctrlPort){
-		for(iter = recvdRoutingTable.begin(); iter != recvdRoutingTable.end();iter++){
-			it = routingTable.find(iter->first);
-			if (it != routingTable.end()){
-				if(it->first != nodeID){
-					it->second.distance = iter->second.distance+1;
-					it->second.intermediateNode = iter->second.intermediateNode;
-				}
+	//case 3: force update changes beyond our intermediate node
+	
+	for(auto ourIter = routingTable.begin(); ourIter != routingTable.end();ourIter++){
+		if(ourIter->second.intermediateNode == sourceNodeID){
+			it = recvdRoutingTable.find(ourIter->first);
+			if(it!= recvdRoutingTable.end()){
+				ourIter->second.distance = it->second.distance++;
 			}
 		}
-	}*/
+	}
+		
 }
 
 void receiveDataPacket()
